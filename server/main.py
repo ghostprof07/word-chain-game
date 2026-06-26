@@ -141,6 +141,17 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
                 if basari:
                     await odaya_yayinla(oda_kodu, oda.durum())
 
+            elif tip == 'sohbet':
+                metin = (veri.get('mesaj') or '').strip()[:200]
+                if metin and player_id in oda.oyuncular:
+                    p = oda.oyuncular[player_id]
+                    await odaya_yayinla(oda_kodu, {
+                        'tip': 'sohbet',
+                        'no': p['no'],
+                        'ad': p['ad'],
+                        'mesaj': metin,
+                    })
+
             elif tip == 'rematch':
                 yeni_basladi = oda.rematch_iste(player_id)
                 if yeni_basladi:

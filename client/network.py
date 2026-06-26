@@ -100,6 +100,14 @@ class NetworkClient:
             except Exception:
                 pass
 
+    # ── Sohbet mesajı gönderme ────────────────────────────────────────────────
+    def sohbet_gonder(self, mesaj):
+        if self.ws and self.bagli:
+            try:
+                self.ws.send(json.dumps({'tip': 'sohbet', 'mesaj': mesaj}))
+            except Exception:
+                pass
+
     def kapat(self):
         if self.ws:
             try:

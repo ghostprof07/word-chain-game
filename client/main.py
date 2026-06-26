@@ -41,6 +41,7 @@ from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
@@ -254,12 +255,18 @@ class OyunEkrani(Screen):
         self.toplam_lbl = etiket('05:00', boyut=20, kalin=True,
                                  renk=(0.5, 0.5, 0.5, 1), hizala='left')
         self.kelime_lbl = etiket('0 kelime', boyut=12, renk=(0.4, 0.4, 0.4, 1))
+        # Sohbet butonu (okunmamış sayısını da gösterir)
+        self.sohbet_btn = buton('💬', renk_bg=MAVI, renk_yazi=(0, 0, 0, 1), boyut=15,
+                                callback=lambda *_: App.get_running_app().sohbet_ac())
+        self.sohbet_btn.size_hint_x = None
+        self.sohbet_btn.width = dp(52)
         cik = buton('ÇIK', renk_bg=GENC, renk_yazi=(0.6, 0.6, 0.6, 1), boyut=12,
                     callback=lambda *_: App.get_running_app().odadan_cik())
         cik.size_hint_x = None
         cik.width = dp(60)
         ust.add_widget(self.toplam_lbl)
         ust.add_widget(self.kelime_lbl)
+        ust.add_widget(self.sohbet_btn)
         ust.add_widget(cik)
         kok.add_widget(ust)
 
@@ -568,6 +575,11 @@ class WordChainOnlineApp(App):
         self.net.on_close = self._baglanti_koptu
         self._benim_no = 1
         self._oda_kodu = None
+        # Sohbet durumu
+        self._sohbet = []            # [{'no':int, 'ad':str, 'mesaj':str}]
+        self._sohbet_popup = None
+        self._sohbet_kutu = None     # popup içindeki mesaj listesi
+        self._okunmamis = 0
 
         self.sm = ScreenManager(transition=FadeTransition(duration=0.2))
         self.sm.add_widget(BaglanEkrani(name='baglan'))
@@ -610,6 +622,9 @@ class WordChainOnlineApp(App):
             ekran.durum.color = KIRMIZI
             self.sm.current = 'baglan'
 
+        elif tip == 'sohbet':
+            self._sohbet_geldi(veri)
+
         elif tip == 'kelime_sonuc':
             self.sm.get_screen('oyun').kelime_sonuc(veri['basari'], veri['mesaj'])
 
@@ -639,6 +654,88 @@ class WordChainOnlineApp(App):
             else:
                 self.sm.get_screen('sonuc').goster(d, self._benim_no)
                 self.sm.current = 'sonuc'
+
+    # ── SOHBET ───────────────────────────────────────────────────────────────
+    @staticmethod
+    def _hex(renk):
+        return ''.join(f'{int(c * 255):02x}' for c in renk[:3])
+
+    def _sohbet_geldi(self, veri):
+        """Sunucudan sohbet mesajı geldi."""
+        m = {'no': veri.get('no'), 'ad': veri.get('ad', '?'),
+             'mesaj': veri.get('mesaj', '')}
+        self._sohbet.append(m)
+        if self._sohbet_popup is not None:
+            self._sohbet_satir_ekle(m)
+        else:
+            self._okunmamis += 1
+            self._sohbet_rozet_guncelle()
+
+    def _sohbet_rozet_guncelle(self):
+        try:
+            btn = self.sm.get_screen('oyun').sohbet_btn
+            btn.text = f'💬 {self._okunmamis}' if self._okunmamis else '💬'
+        except Exception:
+            pass
+
+    def _sohbet_satir_ekle(self, m):
+        if self._sohbet_kutu is None:
+            return
+        renk = YESIL if m.get('no') == 1 else MAVI
+        satir = Label(
+            text=f"[color=#{self._hex(renk)}][b]{m['ad']}[/b][/color]: {m['mesaj']}",
+            markup=True, font_size=dp(14), color=(0.9, 0.9, 0.9, 1),
+            size_hint_y=None, halign='left', valign='top')
+        satir.bind(width=lambda i, w: setattr(i, 'text_size', (w, None)))
+        satir.bind(texture_size=lambda i, ts: setattr(i, 'height', ts[1] + dp(4)))
+        self._sohbet_kutu.add_widget(satir)
+
+    def sohbet_ac(self):
+        """Sohbet penceresini açar."""
+        self._okunmamis = 0
+        self._sohbet_rozet_guncelle()
+
+        icerik = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(8))
+        scroll = ScrollView()
+        self._sohbet_kutu = BoxLayout(orientation='vertical', size_hint_y=None,
+                                      spacing=dp(6), padding=[0, dp(4)])
+        self._sohbet_kutu.bind(minimum_height=self._sohbet_kutu.setter('height'))
+        scroll.add_widget(self._sohbet_kutu)
+        icerik.add_widget(scroll)
+
+        for m in self._sohbet:
+            self._sohbet_satir_ekle(m)
+
+        alt = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
+        giris = giris_kutusu('Mesaj yaz...', font_size=dp(16))
+        gonder = buton('GÖNDER', renk_bg=MAVI, boyut=14)
+        gonder.size_hint_x = None
+        gonder.width = dp(90)
+
+        def _gonder(*_):
+            t = giris.text.strip()
+            giris.text = ''
+            if t:
+                self.net.sohbet_gonder(t)
+            giris.focus = True
+
+        giris.bind(on_text_validate=_gonder)
+        gonder.bind(on_press=_gonder)
+        alt.add_widget(giris)
+        alt.add_widget(gonder)
+        icerik.add_widget(alt)
+
+        self._sohbet_popup = Popup(
+            title='Sohbet', content=icerik, size_hint=(0.92, 0.8),
+            title_color=(1, 1, 1, 1), separator_color=MAVI)
+
+        def _kapandi(*_):
+            self._sohbet_popup = None
+            self._sohbet_kutu = None
+
+        self._sohbet_popup.bind(on_dismiss=_kapandi)
+        self._sohbet_popup.open()
+        Clock.schedule_once(lambda dt: setattr(scroll, 'scroll_y', 0), 0.1)
 
     def on_stop(self):
         self.net.kapat()
