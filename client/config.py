@@ -14,9 +14,9 @@ NOT: Gerçek yayında mutlaka https/wss (güvenli) kullan.
 """
 import os
 
-# Varsayılan: masaüstü testi. Telefon derlemesinde aşağıyı kendi sunucunla değiştir.
-_VARSAYILAN_HTTP = 'http://127.0.0.1:8000'
-_VARSAYILAN_WS = 'ws://127.0.0.1:8000'
+# YAYINDAKİ SUNUCU (Render) — telefon uygulaması buraya bağlanır.
+_VARSAYILAN_HTTP = 'https://wordchain-server.onrender.com'
+_VARSAYILAN_WS = 'wss://wordchain-server.onrender.com'
 
 # Ortam değişkeni varsa onu kullan (masaüstü/PyCharm testleri için), yoksa varsayılan.
 SUNUCU_HTTP = os.environ.get('WC_HTTP', _VARSAYILAN_HTTP)
