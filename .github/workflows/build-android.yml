@@ -8,8 +8,6 @@ on:
 
 jobs:
   build:
-    # Ubuntu 22.04: gerekli eski paketler (libtinfo5 vb.) burada mevcut.
-    # 24.04'te bu paketler kaldırıldığı için derleme patlıyordu.
     runs-on: ubuntu-22.04
     steps:
       - name: Kodu çek
@@ -26,14 +24,34 @@ jobs:
           sudo apt-get install -y \
             git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
-            cmake libffi-dev libssl-dev build-essential ccache
+            cmake libffi-dev libssl-dev build-essential ccache wget
+
+      # ── B PLANI: Android SDK'yi buildozer'in TAM beklediği yere elle kur ──
+      # build-tools + platform + lisanslar önceden hazır olunca
+      # "Aidl not found / build-tools folder not found" hatası oluşmaz.
+      - name: Android SDK + build-tools kur
+        run: |
+          set -e
+          SDK=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK/cmdline-tools
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
+          unzip -q cmdtools.zip -d $SDK/cmdline-tools
+          mv $SDK/cmdline-tools/cmdline-tools $SDK/cmdline-tools/latest
+          SDKMGR=$SDK/cmdline-tools/latest/bin/sdkmanager
+          yes | $SDKMGR --sdk_root=$SDK --licenses >/dev/null 2>&1 || true
+          $SDKMGR --sdk_root=$SDK "platform-tools" "build-tools;34.0.0" "platforms;android-34"
+          yes | $SDKMGR --sdk_root=$SDK --licenses >/dev/null 2>&1 || true
+          echo "--- Kurulan build-tools ---"
+          ls $SDK/build-tools
+          echo "--- aidl var mi? ---"
+          ls $SDK/build-tools/34.0.0/aidl
 
       - name: Buildozer kur
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade buildozer cython==0.29.36
 
-      # Buildozer ilk derlemede Android SDK/NDK'yi otomatik indirir (uzun sürer).
       - name: APK derle
         working-directory: client
         run: buildozer -v android debug
