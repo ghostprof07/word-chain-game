@@ -42,6 +42,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 
 from network import NetworkClient
@@ -69,9 +70,9 @@ def kart(widget, renk=GENC, radius=12):
     )
 
 
-def etiket(metin, boyut=15, renk=(1, 1, 1, 1), kalin=False, hizala='center'):
+def etiket(metin, boyut=15, renk=(1, 1, 1, 1), kalin=False, hizala='center', **kw):
     lbl = Label(text=metin, font_size=dp(boyut), color=renk,
-                bold=kalin, halign=hizala, valign='middle')
+                bold=kalin, halign=hizala, valign='middle', **kw)
     lbl.bind(size=lambda *a: setattr(lbl, 'text_size', lbl.size))
     return lbl
 
@@ -117,6 +118,20 @@ class BaglanEkrani(Screen):
         self.ad_giris = giris_kutusu('Adın...', size_hint_y=None, height=dp(54))
         kok.add_widget(self.ad_giris)
 
+        # ── Süre seçeneği (oda kuran kişi seçer) ──
+        self._secili_sure = 300   # varsayılan 5 dk
+        kok.add_widget(etiket('Oyun süresi', boyut=12, renk=(0.5, 0.5, 0.5, 1),
+                              hizala='left', size_hint_y=None, height=dp(18)))
+        self._sure_satir = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        self._sure_butonlar = {}
+        for etiket_metin, saniye in [('3 dk', 180), ('5 dk', 300), ('10 dk', 600)]:
+            b = self._secim_butonu(etiket_metin,
+                                   lambda _b, s=saniye: self._sure_sec(s))
+            self._sure_butonlar[saniye] = b
+            self._sure_satir.add_widget(b)
+        kok.add_widget(self._sure_satir)
+        self._sure_sec(300)   # başlangıç vurgusu
+
         # Oda oluştur butonu
         kok.add_widget(buton('ODA OLUŞTUR', callback=self.oda_olustur))
 
@@ -145,6 +160,28 @@ class BaglanEkrani(Screen):
     def _ad(self):
         return self.ad_giris.text.strip() or 'Oyuncu'
 
+    def _secim_butonu(self, metin, callback):
+        """Rengi sonradan değiştirilebilen seçim butonu (Color referansı saklanır)."""
+        btn = Button(text=metin, font_size=dp(14), bold=True,
+                     color=(0.7, 0.7, 0.7, 1),
+                     background_normal='', background_color=(0, 0, 0, 0))
+        with btn.canvas.before:
+            renk = Color(*GENC)
+            rect = RoundedRectangle(pos=btn.pos, size=btn.size, radius=[dp(12)])
+        btn.bind(pos=lambda *a: setattr(rect, 'pos', btn.pos),
+                 size=lambda *a: setattr(rect, 'size', btn.size))
+        btn._renk = renk    # _sure_sec bunu güncelleyecek
+        btn.bind(on_press=callback)
+        return btn
+
+    def _sure_sec(self, saniye):
+        """Süre butonlarından birini seçer ve vurgular."""
+        self._secili_sure = saniye
+        for s, b in self._sure_butonlar.items():
+            secili = (s == saniye)
+            b._renk.rgba = YESIL if secili else GENC
+            b.color = (0, 0, 0, 1) if secili else (0.7, 0.7, 0.7, 1)
+
     def oda_olustur(self, *_):
         self.durum.text = 'Oda oluşturuluyor...'
         self.durum.color = SARI
@@ -156,7 +193,7 @@ class BaglanEkrani(Screen):
                 self.durum.text = 'Sunucuya ulaşılamadı!'
                 self.durum.color = KIRMIZI
 
-        self.net.oda_olustur(geldi)
+        self.net.oda_olustur(geldi, sure=self._secili_sure)
 
     def katil(self, *_):
         kod = self.kod_giris.text.strip().upper()
@@ -225,6 +262,18 @@ class OyunEkrani(Screen):
         ust.add_widget(self.kelime_lbl)
         ust.add_widget(cik)
         kok.add_widget(ust)
+
+        # ── KELIME ZINCIRI (üstte, kullanılan kelimeler sırayla) ──
+        self.zincir_scroll = ScrollView(size_hint_y=None, height=dp(36),
+                                        do_scroll_x=True, do_scroll_y=False,
+                                        bar_width=0)
+        self.zincir_kutu = BoxLayout(orientation='horizontal', size_hint=(None, None),
+                                     height=dp(36), spacing=dp(2), padding=[dp(6), 0])
+        self.zincir_kutu.bind(minimum_width=self.zincir_kutu.setter('width'))
+        self.zincir_scroll.add_widget(self.zincir_kutu)
+        kart(self.zincir_scroll, renk=(0.1, 0.1, 0.1, 1), radius=8)
+        kok.add_widget(self.zincir_scroll)
+        self._zincir_uzunluk = -1
 
         # Oyuncu kartları
         oyuncu_satir = BoxLayout(size_hint_y=None, height=dp(86), spacing=dp(12))
@@ -329,6 +378,9 @@ class OyunEkrani(Screen):
         # Son kelime
         self.son_lbl.text = f"Son: {d['son_kelime']}" if d['son_kelime'] else ''
 
+        # Kelime zinciri (üstte)
+        self._zincir_guncelle(d.get('zincir', []))
+
         # Puanlar + isimler
         oyuncular = d.get('oyuncular', {})
         self.p1_ad.text = oyuncular.get('1', 'Oyuncu 1')
@@ -366,6 +418,33 @@ class OyunEkrani(Screen):
                 Color(*GENC)
             RoundedRectangle(pos=kutu.pos, size=kutu.size, radius=[dp(12)])
 
+    def _zincir_guncelle(self, zincir):
+        """Üstteki kelime zincirini günceller (oyuncu rengine göre)."""
+        # Sadece kelime sayısı değiştiyse yeniden çiz (performans)
+        if len(zincir) == self._zincir_uzunluk:
+            return
+        self._zincir_uzunluk = len(zincir)
+        self.zincir_kutu.clear_widgets()
+
+        if not zincir:
+            bos = Label(text='Henüz kelime yok', font_size=dp(12),
+                        color=(0.35, 0.35, 0.35, 1), size_hint_x=None, width=dp(150))
+            self.zincir_kutu.add_widget(bos)
+            return
+
+        for i, oge in enumerate(zincir):
+            renk = YESIL if oge['no'] == 1 else MAVI
+            metin = oge['kelime'] if i == 0 else f"→  {oge['kelime']}"
+            lbl = Label(text=metin, font_size=dp(14), bold=True, color=renk,
+                        size_hint_x=None)
+            lbl.bind(texture_size=lambda inst, val: setattr(inst, 'width', val[0] + dp(8)))
+            lbl.texture_update()
+            lbl.width = lbl.texture_size[0] + dp(8)
+            self.zincir_kutu.add_widget(lbl)
+
+        # En son kelimeye kaydır
+        Clock.schedule_once(lambda dt: setattr(self.zincir_scroll, 'scroll_x', 1), 0)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  4. SONUÇ EKRANI
@@ -379,28 +458,39 @@ class SonucEkrani(Screen):
 
     def goster(self, d, benim_no):
         self._kok.clear_widgets()
+        self._benim_no = benim_no
         p1, p2 = d['puan']['1'], d['puan']['2']
         kazanan = d.get('kazanan')
+        ayrilan = d.get('ayrilan_ad')
 
-        if kazanan == 0 or kazanan is None:
-            yazi, renk = 'BERABERLİK!', SARI
-        elif kazanan == benim_no:
-            yazi, renk = 'KAZANDIN! 🎉', YESIL
+        # Rakip ayrıldıysa farklı başlık
+        if ayrilan:
+            ust_yazi, ust_renk = 'OYUN BİTTİ', (0.5, 0.5, 0.5, 1)
+            yazi, renk = 'RAKİP AYRILDI', SARI
         else:
-            yazi, renk = 'KAYBETTİN', KIRMIZI
+            ust_yazi, ust_renk = 'OYUN BİTTİ', (0.5, 0.5, 0.5, 1)
+            if kazanan == 0 or kazanan is None:
+                yazi, renk = 'BERABERLİK!', SARI
+            elif kazanan == benim_no:
+                yazi, renk = 'KAZANDIN! 🎉', YESIL
+            else:
+                yazi, renk = 'KAYBETTİN', KIRMIZI
 
-        self._kok.add_widget(Label(size_hint_y=None, height=dp(20)))
-        self._kok.add_widget(etiket('OYUN BİTTİ', boyut=13, renk=(0.5, 0.5, 0.5, 1)))
-        self._kok.add_widget(etiket(yazi, boyut=34, kalin=True, renk=renk))
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(16)))
+        self._kok.add_widget(etiket(ust_yazi, boyut=13, renk=ust_renk))
+        self._kok.add_widget(etiket(yazi, boyut=32, kalin=True, renk=renk))
+        if ayrilan:
+            self._kok.add_widget(etiket(f'{ayrilan} oyundan ayrıldı', boyut=13,
+                                        renk=(0.6, 0.6, 0.6, 1)))
 
         oyuncular = d.get('oyuncular', {})
-        kutular = BoxLayout(size_hint_y=None, height=dp(110), spacing=dp(14))
+        kutular = BoxLayout(size_hint_y=None, height=dp(100), spacing=dp(14))
         for no, c in [(1, YESIL), (2, MAVI)]:
             kutu = BoxLayout(orientation='vertical', spacing=dp(4), padding=dp(12))
             kart(kutu, renk=GENC)
             kutu.add_widget(etiket(oyuncular.get(str(no), f'Oyuncu {no}'),
                                    boyut=11, kalin=True, renk=c))
-            kutu.add_widget(etiket(str(d['puan'][str(no)]), boyut=44, kalin=True))
+            kutu.add_widget(etiket(str(d['puan'][str(no)]), boyut=42, kalin=True))
             kutu.add_widget(etiket('puan', boyut=12, renk=(0.5, 0.5, 0.5, 1)))
             kutular.add_widget(kutu)
         self._kok.add_widget(kutular)
@@ -408,25 +498,64 @@ class SonucEkrani(Screen):
         toplam = p1 + p2
         sayi = d['kelime_sayisi']
         ort = f'{toplam/sayi:.1f}' if sayi else '0'
-        istat = BoxLayout(size_hint_y=None, height=dp(72), padding=dp(12))
+        istat = BoxLayout(size_hint_y=None, height=dp(64), padding=dp(12))
         kart(istat, renk=GENC)
         for deger, ad in [(str(sayi), 'Kelime'), (str(toplam), 'Toplam'), (ort, 'Ort')]:
             k = BoxLayout(orientation='vertical')
-            k.add_widget(etiket(deger, boyut=26, kalin=True))
+            k.add_widget(etiket(deger, boyut=24, kalin=True))
             k.add_widget(etiket(ad, boyut=10, renk=(0.5, 0.5, 0.5, 1)))
             istat.add_widget(k)
         self._kok.add_widget(istat)
 
         self._kok.add_widget(etiket('Kullanılan Kelimeler', boyut=12,
-                                    renk=(0.5, 0.5, 0.5, 1)))
+                                    renk=(0.5, 0.5, 0.5, 1), size_hint_y=None,
+                                    height=dp(18)))
         kelimeler = d.get('kullanilan', [])
         self._kok.add_widget(etiket('  '.join(kelimeler) if kelimeler else '—',
                                     boyut=13, renk=(0.7, 0.7, 0.7, 1)))
 
+        # Rematch bekleme mesajı
+        self._rematch_durum = etiket('', boyut=13, kalin=True, renk=SARI,
+                                     size_hint_y=None, height=dp(24))
+        self._kok.add_widget(self._rematch_durum)
+
         self._kok.add_widget(Label())
-        self._kok.add_widget(buton('ANA MENÜ',
-                                   callback=lambda *_: App.get_running_app().ana_menuye()))
-        self._kok.add_widget(Label(size_hint_y=None, height=dp(14)))
+
+        # Butonlar: rakip ayrıldıysa rematch yok, sadece ana menü
+        if not ayrilan:
+            self._rematch_btn = buton('🔄 TEKRAR OYNA',
+                                      callback=lambda *_: self._rematch_iste())
+            self._rematch_btn.size_hint_y = None
+            self._rematch_btn.height = dp(54)
+            self._kok.add_widget(self._rematch_btn)
+        else:
+            self._rematch_btn = None
+
+        self._kok.add_widget(buton('ANA MENÜ', renk_bg=GENC,
+                                   renk_yazi=(0.8, 0.8, 0.8, 1),
+                                   callback=lambda *_: App.get_running_app().odadan_cik()))
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(12)))
+
+    def _rematch_iste(self):
+        """Tekrar oyna isteği gönderir, bekleme durumuna geçer."""
+        App.get_running_app().net.rematch_iste()
+        self._rematch_durum.text = 'Rakip bekleniyor...'
+        if self._rematch_btn:
+            self._rematch_btn.disabled = True
+            self._rematch_btn.opacity = 0.5
+
+    def guncelle(self, d):
+        """Sonuç ekranı açıkken rematch durumunu / ayrılmayı günceller."""
+        # Rakip ayrıldıysa ekranı yeniden çiz (rematch butonunu kaldırmak için)
+        if d.get('ayrilan_ad') and getattr(self, '_rematch_btn', None):
+            self.goster(d, self._benim_no)
+            return
+        sayi = d.get('rematch_sayisi', 0)
+        if sayi == 1 and hasattr(self, '_rematch_durum'):
+            # Karşı taraf istemiş olabilir; benim butonum hâlâ aktifse bilgilendir
+            if self._rematch_btn and not self._rematch_btn.disabled:
+                self._rematch_durum.text = 'Rakip tekrar oynamak istiyor!'
+                self._rematch_durum.color = YESIL
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -484,6 +613,11 @@ class WordChainOnlineApp(App):
         elif tip == 'kelime_sonuc':
             self.sm.get_screen('oyun').kelime_sonuc(veri['basari'], veri['mesaj'])
 
+        elif tip == 'yeni_oyun':
+            # Rematch kabul edildi — iki oyuncu da yeni tura geçer
+            self.sm.get_screen('oyun').durum_guncelle(veri)
+            self.sm.current = 'oyun'
+
         elif tip in ('durum', 'oyuncu_ayrildi'):
             self._durum_isle(veri)
 
@@ -499,8 +633,12 @@ class WordChainOnlineApp(App):
             if self.sm.current == 'oyun':
                 self.sm.get_screen('oyun').durum_guncelle(d)
         elif d.get('bitti'):
-            self.sm.get_screen('sonuc').goster(d, self._benim_no)
-            self.sm.current = 'sonuc'
+            if self.sm.current == 'sonuc':
+                # Zaten sonuç ekranındayız — rematch/ayrılma durumunu güncelle
+                self.sm.get_screen('sonuc').guncelle(d)
+            else:
+                self.sm.get_screen('sonuc').goster(d, self._benim_no)
+                self.sm.current = 'sonuc'
 
     def on_stop(self):
         self.net.kapat()

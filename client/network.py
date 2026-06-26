@@ -27,11 +27,18 @@ class NetworkClient:
         self.bagli = False
 
     # ── Oda oluşturma (HTTP) ──────────────────────────────────────────────────
-    def oda_olustur(self, callback):
-        """Sunucudan yeni oda kodu ister. callback(kod_veya_None) ana thread'de çağrılır."""
+    def oda_olustur(self, callback, sure=300, hamle=20):
+        """
+        Sunucudan yeni oda kodu ister (seçilen süreyle).
+        callback(kod_veya_None) ana thread'de çağrılır.
+        """
         def _run():
             try:
-                r = requests.post(f'{self.http}/oda-olustur', timeout=8)
+                r = requests.post(
+                    f'{self.http}/oda-olustur',
+                    params={'sure': sure, 'hamle': hamle},
+                    timeout=8,
+                )
                 kod = r.json().get('oda')
             except Exception:
                 kod = None
@@ -82,6 +89,14 @@ class NetworkClient:
         if self.ws and self.bagli:
             try:
                 self.ws.send(json.dumps({'tip': 'kelime', 'kelime': kelime}))
+            except Exception:
+                pass
+
+    # ── Tekrar oyna (rematch) isteği ──────────────────────────────────────────
+    def rematch_iste(self):
+        if self.ws and self.bagli:
+            try:
+                self.ws.send(json.dumps({'tip': 'rematch'}))
             except Exception:
                 pass
 

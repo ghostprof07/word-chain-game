@@ -50,21 +50,30 @@ def kelime_puani(kelime):
 class GameRoom:
     """Tek bir oyun odasını ve durumunu temsil eder."""
 
-    TOPLAM_SURE = 300   # toplam 5 dakika
-    HAMLE_SURE = 20     # her hamle için saniye
-
-    def __init__(self, oda_kodu):
+    def __init__(self, oda_kodu, toplam_sure=300, hamle_sure=20):
         self.kod = oda_kodu
+        # Süre seçeneği: oda kuran kişi belirler (saniye)
+        self.varsayilan_toplam = int(toplam_sure)
+        self.varsayilan_hamle = int(hamle_sure)
         self.oyuncular = {}          # player_id -> {"ad": str, "no": 1|2}
+        self._yeni_oyun_durumu()
+        # Rematch (tekrar oyna) isteyen oyuncuların id'leri
+        self.rematch_isteyenler = set()
+        # Bir oyuncu oyun ortasında ayrıldıysa adı burada tutulur
+        self.ayrilan_ad = None
+
+    def _yeni_oyun_durumu(self):
+        """Yeni bir oyunun başlangıç değerlerini kurar (oyuncuları korur)."""
         self.puan = {1: 0, 2: 0}
         self.kullanilan = set()
+        self.zincir = []            # sıralı: [{"kelime": str, "no": 1|2, "puan": int}]
         self.son_kelime = ''
         self.gerekli_harf = random.choice(string.ascii_lowercase)
-        self.siradaki_no = 1         # sıradaki oyuncunun numarası (1 veya 2)
+        self.siradaki_no = 1
         self.basladi = False
         self.bitti = False
-        self.toplam_sure = self.TOPLAM_SURE
-        self.hamle_sure = self.HAMLE_SURE
+        self.toplam_sure = self.varsayilan_toplam
+        self.hamle_sure = self.varsayilan_hamle
         self.son_tik = time.time()
 
     # ── Oyuncu yönetimi ──────────────────────────────────────────────────────
@@ -80,13 +89,18 @@ class GameRoom:
             self.basladi = True
             # Oyun gerçekten şimdi başlıyor — zamanlayıcıyı baştan kur
             # (lobby'de geçen bekleme süresi orta oyuna sayılmasın)
-            self.toplam_sure = self.TOPLAM_SURE
-            self.hamle_sure = self.HAMLE_SURE
+            self.toplam_sure = self.varsayilan_toplam
+            self.hamle_sure = self.varsayilan_hamle
             self.son_tik = time.time()
         return no
 
     def oyuncu_cikar(self, player_id):
-        self.oyuncular.pop(player_id, None)
+        ayrilan = self.oyuncular.pop(player_id, None)
+        # Oyun ortasında ayrılma: oyunu bitir, kalan oyuncuya bildir
+        if ayrilan and self.basladi and not self.bitti:
+            self.ayrilan_ad = ayrilan['ad']
+            self.bitti = True
+        self.rematch_isteyenler.discard(player_id)
 
     def oyuncu_adi(self, no):
         for p in self.oyuncular.values():
@@ -96,6 +110,25 @@ class GameRoom:
 
     def dolu_mu(self):
         return len(self.oyuncular) >= 2
+
+    # ── Rematch (tekrar oyna) ────────────────────────────────────────────────
+    def rematch_iste(self, player_id):
+        """
+        Oyuncu yeniden oynamak istediğini bildirir.
+        İki oyuncu da isteyince yeni oyun başlar. (yeni_basladi: bool) döndürür.
+        """
+        if player_id not in self.oyuncular:
+            return False
+        self.rematch_isteyenler.add(player_id)
+        # İki oyuncu da hazır ve oda dolu mu?
+        if self.dolu_mu() and len(self.rematch_isteyenler) >= 2:
+            self._yeni_oyun_durumu()
+            self.rematch_isteyenler.clear()
+            self.ayrilan_ad = None
+            self.basladi = True
+            self.son_tik = time.time()
+            return True
+        return False
 
     # ── Oyun akışı ───────────────────────────────────────────────────────────
     def kelime_oyna(self, player_id, kelime):
@@ -130,10 +163,11 @@ class GameRoom:
         puan = kelime_puani(kelime)
         self.puan[oyuncu['no']] += puan
         self.kullanilan.add(kelime)
+        self.zincir.append({'kelime': kelime, 'no': oyuncu['no'], 'puan': puan})
         self.son_kelime = kelime
         self.gerekli_harf = kelime[-1]
         self.siradaki_no = 2 if self.siradaki_no == 1 else 1
-        self.hamle_sure = self.HAMLE_SURE   # sırayı geçince hamle süresi sıfırlanır
+        self.hamle_sure = self.varsayilan_hamle   # sırayı geçince hamle süresi sıfırlanır
         return True, f'+{puan} puan!', puan
 
     def sure_guncelle(self):
@@ -172,8 +206,11 @@ class GameRoom:
             'hamle_sure': max(0, self.hamle_sure),
             'kelime_sayisi': len(self.kullanilan),
             'kullanilan': sorted(self.kullanilan),
+            'zincir': self.zincir,           # sıralı oynanış (üstte göstermek için)
             'oyuncular': {
                 str(p['no']): p['ad'] for p in self.oyuncular.values()
             },
             'kazanan': self.kazanan() if self.bitti else None,
+            'ayrilan_ad': self.ayrilan_ad,   # rakip ayrıldıysa adı
+            'rematch_sayisi': len(self.rematch_isteyenler),
         }

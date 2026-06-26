@@ -53,10 +53,14 @@ async def kok():
 
 
 @app.post("/oda-olustur")
-async def oda_olustur():
-    """Yeni bir oda oluşturur ve kodunu döndürür."""
+async def oda_olustur(sure: int = 300, hamle: int = 20):
+    """
+    Yeni bir oda oluşturur ve kodunu döndürür.
+    sure:  toplam oyun süresi (saniye) — oda kuran kişi seçer
+    hamle: her hamle süresi (saniye)
+    """
     kod = yeni_oda_kodu()
-    ODALAR[kod] = GameRoom(kod)
+    ODALAR[kod] = GameRoom(kod, toplam_sure=sure, hamle_sure=hamle)
     BAGLANTILAR[kod] = {}
     return JSONResponse({"oda": kod})
 
@@ -73,7 +77,7 @@ async def sure_dongusu():
                 # Süre dolduysa ya da her saniye durumu yay
                 await odaya_yayinla(kod, oda.durum())
                 if oda.bitti and not onceki_bitti:
-                    await odaya_yayinla(kod, {'tip': 'oyun_bitti', **oda.durum()})
+                    await odaya_yayinla(kod, {**oda.durum(), 'tip': 'oyun_bitti'})
 
 
 @app.on_event("startup")
@@ -137,6 +141,18 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
                 if basari:
                     await odaya_yayinla(oda_kodu, oda.durum())
 
+            elif tip == 'rematch':
+                yeni_basladi = oda.rematch_iste(player_id)
+                if yeni_basladi:
+                    # İki oyuncu da hazır — yeni oyun başladı, herkese bildir
+                    # NOT: spread ÖNCE, tip SONRA — yoksa durum()'un 'tip'i ezer
+                    await odaya_yayinla(oda_kodu, {
+                        **oda.durum(), 'tip': 'yeni_oyun',
+                    })
+                else:
+                    # Henüz tek taraf istedi — durumu yay (rematch_sayisi güncellensin)
+                    await odaya_yayinla(oda_kodu, oda.durum())
+
             elif tip == 'durum_iste':
                 await websocket.send_text(json.dumps(oda.durum()))
 
@@ -147,8 +163,8 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
         BAGLANTILAR.get(oda_kodu, {}).pop(player_id, None)
         oda.oyuncu_cikar(player_id)
         await odaya_yayinla(oda_kodu, {
-            'tip': 'oyuncu_ayrildi',
             **oda.durum(),
+            'tip': 'oyuncu_ayrildi',
         })
         # Oda boşaldıysa sil
         if not BAGLANTILAR.get(oda_kodu):
