@@ -1,0 +1,11 @@
+# Render.com otomatik kurulum dosyası
+# Render bu dosyayı görünce sunucuyu tek tıkla ayağa kaldırır.
+services:
+  - type: web
+    name: wordchain-server
+    runtime: python
+    rootDir: server
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /

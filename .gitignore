@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Kivy / Buildozer
+.buildozer/
+client/bin/
+*.apk
+
+# PyCharm (run config'leri TUTUYORUZ, gerisini değil)
+.idea/*
+!.idea/runConfigurations/
+!.idea/runConfigurations/*
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
+
+# Geçici
+*.log
+*.tmp
