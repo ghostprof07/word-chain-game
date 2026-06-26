@@ -32,8 +32,9 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE
 # ── ANDROID API SEVİYELERİ ────────────────────────────────────────────────────
 android.api = 34
 android.minapi = 24
-android.ndk = 25b
-android.archs = arm64-v8a,armeabi-v7a
+# Tek mimari: derleme hızlı + neredeyse tüm modern telefonlar arm64.
+# İhtiyaç olursa armeabi-v7a sonradan eklenir.
+android.archs = arm64-v8a
 
 # AndroidX desteği (modern kütüphaneler için)
 android.enable_androidx = True

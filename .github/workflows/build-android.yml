@@ -8,19 +8,35 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Ubuntu 22.04: gerekli eski paketler (libtinfo5 vb.) burada mevcut.
+    # 24.04'te bu paketler kaldırıldığı için derleme patlıyordu.
+    runs-on: ubuntu-22.04
     steps:
       - name: Kodu çek
         uses: actions/checkout@v4
 
-      # Resmi Buildozer action — tüm Android SDK/NDK + bağımlılıkları
-      # doğru sürümlerle hazır Docker konteynerinde kurar (apt derdi yok).
-      - name: APK derle (Buildozer)
-        uses: ArtemSBulgakov/buildozer-action@v1
+      - name: Python kur
+        uses: actions/setup-python@v5
         with:
-          command: buildozer android debug
-          workdir: client
-          buildozer_version: stable
+          python-version: '3.11'
+
+      - name: Sistem bağımlılıkları
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
+            cmake libffi-dev libssl-dev build-essential ccache
+
+      - name: Buildozer kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade buildozer cython==0.29.36
+
+      # Buildozer ilk derlemede Android SDK/NDK'yi otomatik indirir (uzun sürer).
+      - name: APK derle
+        working-directory: client
+        run: buildozer -v android debug
 
       - name: APK'yı yükle (indirilebilir çıktı)
         uses: actions/upload-artifact@v4
