@@ -101,7 +101,7 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
 
     no = oda.oyuncu_ekle(player_id, ad)
     if no is None:
-        await websocket.send_text(json.dumps({'tip': 'hata', 'mesaj': 'Oda dolu!'}))
+        await websocket.send_text(json.dumps({'tip': 'hata', 'mesaj': 'Room is full!'}))
         await websocket.close()
         return
 

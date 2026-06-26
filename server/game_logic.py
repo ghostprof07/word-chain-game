@@ -106,7 +106,7 @@ class GameRoom:
         for p in self.oyuncular.values():
             if p['no'] == no:
                 return p['ad']
-        return f'Oyuncu {no}'
+        return f'Player {no}'
 
     def dolu_mu(self):
         return len(self.oyuncular) >= 2
@@ -137,29 +137,29 @@ class GameRoom:
         (basari: bool, mesaj: str, puan: int) döndürür.
         """
         if not self.basladi or self.bitti:
-            return False, 'Oyun aktif değil.', 0
+            return False, 'Game is not active.', 0
 
         oyuncu = self.oyuncular.get(player_id)
         if not oyuncu:
-            return False, 'Bu odada değilsin.', 0
+            return False, 'You are not in this room.', 0
 
         if oyuncu['no'] != self.siradaki_no:
-            return False, 'Sıra sende değil!', 0
+            return False, 'Not your turn!', 0
 
         kelime = kelime.strip().lower()
         if not kelime or not kelime.isalpha():
-            return False, 'Geçersiz kelime.', 0
+            return False, 'Invalid word.', 0
 
         if kelime in self.kullanilan:
-            return False, 'Bu kelime zaten kullanıldı!', 0
+            return False, 'This word was already used!', 0
 
         if kelime[0] != self.gerekli_harf:
-            return False, f'"{self.gerekli_harf.upper()}" harfiyle başlamalı!', 0
+            return False, f'Must start with "{self.gerekli_harf.upper()}"!', 0
 
         if SOZLUK and kelime not in SOZLUK:
-            return False, 'Geçerli bir İngilizce kelime değil!', 0
+            return False, 'Not a valid English word!', 0
 
-        # ── Başarılı ──
+        # ── Success ──
         puan = kelime_puani(kelime)
         self.puan[oyuncu['no']] += puan
         self.kullanilan.add(kelime)
@@ -167,8 +167,8 @@ class GameRoom:
         self.son_kelime = kelime
         self.gerekli_harf = kelime[-1]
         self.siradaki_no = 2 if self.siradaki_no == 1 else 1
-        self.hamle_sure = self.varsayilan_hamle   # sırayı geçince hamle süresi sıfırlanır
-        return True, f'+{puan} puan!', puan
+        self.hamle_sure = self.varsayilan_hamle   # reset turn timer when turn passes
+        return True, f'+{puan} pts!', puan
 
     def sure_guncelle(self):
         """Gerçek zamana göre süreleri düşürür. Süre bittiyse oyunu bitirir."""
