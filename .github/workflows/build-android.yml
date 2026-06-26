@@ -18,11 +18,19 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Java 17 — yeni cmdline-tools (sdkmanager) Java 17 ZORUNLU kılıyor.
+      # setup-java JAVA_HOME'u 17'ye ayarlar, hem sdkmanager hem buildozer kullanır.
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Sistem bağımlılıkları
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
+            git zip unzip autoconf libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
             cmake libffi-dev libssl-dev build-essential ccache wget
 
