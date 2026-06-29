@@ -6,6 +6,7 @@ import os
 import random
 import string
 import time
+import unicodedata
 
 # İki oyuncu da katılınca oyun başlamadan önceki kısa lobi geri sayımı (saniye).
 LOBI_GERI_SAYIM = 5
@@ -19,12 +20,48 @@ PUAN = {
 }
 
 
-# Desteklenen sözlük dilleri: kod -> başlangıç harfleri alfabesi
+# Desteklenen sözlük dilleri: kod -> OYUN alfabesi (başlangıç harfleri).
+# Aksanlı diller (de/es/fr) için alfabe TABAN harflerdir — kelimeler yüklenirken
+# ve oynanırken aksanlar taban harfe indirilir (bkz. _aksan_sadelestir).
 # YENİ SÖZLÜK DİLİ EKLEMEK: words_<kod>.txt dosyasını bu klasöre koy + buraya alfabe ekle.
 ALFABELER = {
     'en': 'abcdefghijklmnopqrstuvwxyz',
     'tr': 'abcçdefgğhıijklmnoöprsştuüvyz',
+    'de': 'abcdefghijklmnopqrstuvwxyz',
+    'es': 'abcdefghijklmnopqrstuvwxyzñ',
+    'fr': 'abcdefghijklmnopqrstuvwxyz',
 }
+
+# Bu dillerde aksanlar taban harfe indirilir (mobilde aksan yazmak zor +
+# zincir aksanlı harfte tıkanmasın). tr/en kendi alfabesini AYNEN korur.
+SADELESTIR = {'de', 'es', 'fr'}
+_OZEL_HARF = {'ß': 'ss', 'œ': 'oe', 'æ': 'ae'}
+
+# Zincirde sonraki başlangıç harfi: bazı harflerle hiçbir kelime başlamaz.
+# tr: 'ğ' ile kelime başlamaz -> bir sonraki harf 'g' kabul edilir.
+_ZINCIR_HARF = {'tr': {'ğ': 'g'}}
+
+
+def _aksan_sadelestir(metin, dil):
+    """de/es/fr'de aksanları taban harfe indirir (ñ İspanyolca'da korunur)."""
+    if dil not in SADELESTIR:
+        return metin
+    out = []
+    for ch in metin:
+        if ch == 'ñ':
+            out.append(ch)
+        elif ch in _OZEL_HARF:
+            out.append(_OZEL_HARF[ch])
+        else:
+            ayrik = unicodedata.normalize('NFD', ch)
+            taban = ''.join(c for c in ayrik if unicodedata.category(c) != 'Mn')
+            out.append(taban if taban else ch)
+    return ''.join(out)
+
+
+def _zincir_harf(harf, dil):
+    """Kelimenin son harfine göre sonraki başlangıç harfini verir (tr ğ->g)."""
+    return _ZINCIR_HARF.get(dil, {}).get(harf, harf)
 
 
 def _sozluk_yukle_dosya(path):
@@ -33,13 +70,16 @@ def _sozluk_yukle_dosya(path):
 
 
 def _sozlukleri_yukle():
-    """Sunucu klasöründeki words_<kod>.txt dosyalarını yükler."""
+    """Sunucu klasöründeki words_<kod>.txt dosyalarını yükler (aksanlı diller sadeleştirilir)."""
     d = os.path.dirname(__file__)
     sozlukler = {}
     for kod in ALFABELER:
         p = os.path.join(d, f'words_{kod}.txt')
         if os.path.exists(p):
-            sozlukler[kod] = _sozluk_yukle_dosya(p)
+            ham = _sozluk_yukle_dosya(p)
+            if kod in SADELESTIR:
+                ham = {_aksan_sadelestir(w, kod) for w in ham}
+            sozlukler[kod] = ham
 
     # Geriye dönük: en yoksa geliştirme makinesindeki NLTK'dan yükle
     if 'en' not in sozlukler:
@@ -54,6 +94,9 @@ def _sozlukleri_yukle():
 
 
 SOZLUKLER = _sozlukleri_yukle()
+# Her sözlükte kelimelerin başladığı harfler — oyun başı harfi bunlardan seçilir
+# (böylece ilk gerekli harf hep oynanabilir; örn. 'ñ' ile başlatmaz).
+BAS_HARFLER = {kod: {w[0] for w in s if w} for kod, s in SOZLUKLER.items()}
 
 
 def sozluk_getir(dil):
@@ -82,6 +125,8 @@ class GameRoom:
         self.dict_lang = dict_lang if dict_lang in SOZLUKLER else 'en'
         self.sozluk = sozluk_getir(self.dict_lang)
         self.alfabe = ALFABELER.get(self.dict_lang, ALFABELER['en'])
+        # Oyun başı için oynanabilir başlangıç harfleri (yoksa tüm alfabe)
+        self.bas_harfler = sorted(BAS_HARFLER.get(self.dict_lang) or set(self.alfabe))
         self.oyuncular = {}          # player_id -> {"ad": str, "no": 1|2}
         self._yeni_oyun_durumu()
         # Rematch (tekrar oyna) isteyen oyuncuların id'leri
@@ -95,7 +140,7 @@ class GameRoom:
         self.kullanilan = set()
         self.zincir = []            # sıralı: [{"kelime": str, "no": 1|2, "puan": int}]
         self.son_kelime = ''
-        self.gerekli_harf = random.choice(self.alfabe)
+        self.gerekli_harf = random.choice(self.bas_harfler or list(self.alfabe))
         self.siradaki_no = 1
         self.basladi = False
         self.bitti = False
@@ -203,6 +248,8 @@ class GameRoom:
             return False, 'not_your_turn', 0
 
         kelime = kelime.strip().lower()
+        # Aksanlı dillerde aksanları taban harfe indir (sözlük de böyle saklanır).
+        kelime = _aksan_sadelestir(kelime, self.dict_lang)
         if not kelime or not kelime.isalpha():
             return False, 'invalid', 0
 
@@ -221,7 +268,8 @@ class GameRoom:
         self.kullanilan.add(kelime)
         self.zincir.append({'kelime': kelime, 'no': oyuncu['no'], 'puan': puan})
         self.son_kelime = kelime
-        self.gerekli_harf = kelime[-1]
+        # Sonraki başlangıç harfi (tr 'ğ' -> 'g' gibi tıkanmaları çöz)
+        self.gerekli_harf = _zincir_harf(kelime[-1], self.dict_lang)
         self.siradaki_no = 2 if self.siradaki_no == 1 else 1
         self.hamle_sure = self.varsayilan_hamle   # reset turn timer when turn passes
         return True, 'points', puan

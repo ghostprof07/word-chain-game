@@ -61,12 +61,15 @@ SARI    = (1, 0.84, 0, 1)
 KIRMIZI = (1, 0.3, 0.3, 1)
 GENC    = (0.15, 0.15, 0.15, 1)
 
-# Sözlük (kelime doğrulama) dilleri — sunucudaki ALFABELER ile aynı tutulmalı.
-# YENİ SÖZLÜK: buraya kod+ad ekle + sunucuya words_<kod>.txt + ALFABELER.
-# Sözlük (kelime doğrulama) dilleri. Şimdilik sadece İngilizce — Türkçe için
-# sunucuya words_tr.txt kelime listesi eklenince 'tr': 'Türkçe' geri açılacak.
+# Sözlük (kelime doğrulama) dilleri — sunucudaki ALFABELER/words_<kod>.txt ile
+# aynı tutulmalı. YENİ SÖZLÜK: buraya kod+ad ekle + sunucuya words_<kod>.txt +
+# game_logic.ALFABELER girdisi.
 SOZLUK_DILLERI = {
     'en': 'English',
+    'tr': 'Türkçe',
+    'de': 'Deutsch',
+    'es': 'Español',
+    'fr': 'Français',
 }
 
 
