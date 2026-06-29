@@ -635,6 +635,7 @@ class WordChainOnlineApp(App):
         dil_ayarla(self.ayar['app_lang'])
 
         self.net = NetworkClient(SUNUCU_HTTP, SUNUCU_WS)
+        self.net.uyandir()   # Render uyuyorsa arka planda uyandır (cold start'ı gizle)
         self.net.on_message = self._mesaj_geldi
         self.net.on_close = self._baglanti_koptu
         self._benim_no = 1

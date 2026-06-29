@@ -10,6 +10,14 @@ import requests
 import websocket  # websocket-client paketi
 from kivy.clock import Clock
 
+# Android'de websocket-client sistem CA sertifikalarını bulamaz; certifi'nin
+# paketlenmiş CA listesini kullanırız (wss el sıkışması için zorunlu).
+try:
+    import certifi
+    _CA_BUNDLE = certifi.where()
+except Exception:
+    _CA_BUNDLE = None
+
 
 class NetworkClient:
     def __init__(self, sunucu_http, sunucu_ws):
@@ -26,6 +34,20 @@ class NetworkClient:
         self.on_close = None
         self.bagli = False
 
+    # ── Sunucuyu uyandır (cold start'ı gizle) ─────────────────────────────────
+    def uyandir(self):
+        """
+        Render free tier sunucusu uykudaysa arka planda uyandırır.
+        Uygulama açılışında çağrılır; kullanıcı adını yazana kadar sunucu
+        uyanmış olur, böylece 'oda oluştur' anında yanıt verir.
+        """
+        def _run():
+            try:
+                requests.get(f'{self.http}/', timeout=60)
+            except Exception:
+                pass
+        threading.Thread(target=_run, daemon=True).start()
+
     # ── Oda oluşturma (HTTP) ──────────────────────────────────────────────────
     def oda_olustur(self, callback, sure=300, hamle=20, dil='en'):
         """
@@ -33,15 +55,20 @@ class NetworkClient:
         callback(kod_veya_None) ana thread'de çağrılır.
         """
         def _run():
-            try:
-                r = requests.post(
-                    f'{self.http}/oda-olustur',
-                    params={'sure': sure, 'hamle': hamle, 'dil': dil},
-                    timeout=8,
-                )
-                kod = r.json().get('oda')
-            except Exception:
-                kod = None
+            kod = None
+            # Render free tier uykudan ~50-60sn'de uyanir; ilk istek uzun surebilir.
+            # Bu yuzden uzun timeout + bir kez yeniden deneme (cold start'i kurtarir).
+            for _deneme in range(2):
+                try:
+                    r = requests.post(
+                        f'{self.http}/oda-olustur',
+                        params={'sure': sure, 'hamle': hamle, 'dil': dil},
+                        timeout=60,
+                    )
+                    kod = r.json().get('oda')
+                    break
+                except Exception:
+                    kod = None
             Clock.schedule_once(lambda dt: callback(kod), 0)
         threading.Thread(target=_run, daemon=True).start()
 
@@ -77,9 +104,13 @@ class NetworkClient:
             on_close=_on_close,
             on_error=_on_error,
         )
+        run_kwargs = {'ping_interval': 20, 'ping_timeout': 10}
+        # wss bağlantısında CA paketini açıkça ver (özellikle Android için).
+        if self.ws_base.startswith('wss') and _CA_BUNDLE:
+            run_kwargs['sslopt'] = {'ca_certs': _CA_BUNDLE}
         self._thread = threading.Thread(
             target=self.ws.run_forever,
-            kwargs={'ping_interval': 20, 'ping_timeout': 10},
+            kwargs=run_kwargs,
             daemon=True,
         )
         self._thread.start()
