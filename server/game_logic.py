@@ -16,28 +16,48 @@ PUAN = {
 }
 
 
-def _sozluk_yukle():
-    """İngilizce kelime listesini yükler (NLTK words dosyası ya da paket içi yedek)."""
-    # Sunucu klasöründeki yerel kelime dosyası
-    yerel = os.path.join(os.path.dirname(__file__), 'words_en.txt')
-    if os.path.exists(yerel):
-        with open(yerel, encoding='utf-8', errors='ignore') as f:
-            return set(l.strip().lower() for l in f if l.strip().isalpha())
-
-    # NLTK kullanıcı klasörü (geliştirme makinesinde)
-    nltk_dosya = os.path.join(
-        os.path.expanduser('~'),
-        'AppData', 'Roaming', 'nltk_data', 'corpora', 'words', 'en'
-    )
-    if os.path.exists(nltk_dosya):
-        with open(nltk_dosya, encoding='utf-8', errors='ignore') as f:
-            return set(l.strip().lower() for l in f if l.strip().isalpha())
-
-    # Hiçbiri yoksa boş küme (sözlük kontrolü devre dışı kalır)
-    return set()
+# Desteklenen sözlük dilleri: kod -> başlangıç harfleri alfabesi
+# YENİ SÖZLÜK DİLİ EKLEMEK: words_<kod>.txt dosyasını bu klasöre koy + buraya alfabe ekle.
+ALFABELER = {
+    'en': 'abcdefghijklmnopqrstuvwxyz',
+    'tr': 'abcçdefgğhıijklmnoöprsştuüvyz',
+}
 
 
-SOZLUK = _sozluk_yukle()
+def _sozluk_yukle_dosya(path):
+    with open(path, encoding='utf-8', errors='ignore') as f:
+        return set(l.strip().lower() for l in f if l.strip().isalpha())
+
+
+def _sozlukleri_yukle():
+    """Sunucu klasöründeki words_<kod>.txt dosyalarını yükler."""
+    d = os.path.dirname(__file__)
+    sozlukler = {}
+    for kod in ALFABELER:
+        p = os.path.join(d, f'words_{kod}.txt')
+        if os.path.exists(p):
+            sozlukler[kod] = _sozluk_yukle_dosya(p)
+
+    # Geriye dönük: en yoksa geliştirme makinesindeki NLTK'dan yükle
+    if 'en' not in sozlukler:
+        nltk_dosya = os.path.join(
+            os.path.expanduser('~'),
+            'AppData', 'Roaming', 'nltk_data', 'corpora', 'words', 'en'
+        )
+        if os.path.exists(nltk_dosya):
+            sozlukler['en'] = _sozluk_yukle_dosya(nltk_dosya)
+
+    return sozlukler
+
+
+SOZLUKLER = _sozlukleri_yukle()
+
+
+def sozluk_getir(dil):
+    """Verilen dilin sözlük kümesini döndürür (yoksa İngilizce ya da boş)."""
+    if dil in SOZLUKLER:
+        return SOZLUKLER[dil]
+    return SOZLUKLER.get('en', set())
 
 
 def kelime_puani(kelime):
@@ -50,11 +70,15 @@ def kelime_puani(kelime):
 class GameRoom:
     """Tek bir oyun odasını ve durumunu temsil eder."""
 
-    def __init__(self, oda_kodu, toplam_sure=300, hamle_sure=20):
+    def __init__(self, oda_kodu, toplam_sure=300, hamle_sure=20, dict_lang='en'):
         self.kod = oda_kodu
         # Süre seçeneği: oda kuran kişi belirler (saniye)
         self.varsayilan_toplam = int(toplam_sure)
         self.varsayilan_hamle = int(hamle_sure)
+        # Sözlük (kelime doğrulama) dili — oda kuran kişi seçer
+        self.dict_lang = dict_lang if dict_lang in SOZLUKLER else 'en'
+        self.sozluk = sozluk_getir(self.dict_lang)
+        self.alfabe = ALFABELER.get(self.dict_lang, ALFABELER['en'])
         self.oyuncular = {}          # player_id -> {"ad": str, "no": 1|2}
         self._yeni_oyun_durumu()
         # Rematch (tekrar oyna) isteyen oyuncuların id'leri
@@ -68,7 +92,7 @@ class GameRoom:
         self.kullanilan = set()
         self.zincir = []            # sıralı: [{"kelime": str, "no": 1|2, "puan": int}]
         self.son_kelime = ''
-        self.gerekli_harf = random.choice(string.ascii_lowercase)
+        self.gerekli_harf = random.choice(self.alfabe)
         self.siradaki_no = 1
         self.basladi = False
         self.bitti = False
@@ -134,30 +158,31 @@ class GameRoom:
     def kelime_oyna(self, player_id, kelime):
         """
         Bir oyuncunun kelime denemesini işler.
-        (basari: bool, mesaj: str, puan: int) döndürür.
+        (basari: bool, kod: str, puan: int) döndürür.
+        kod = istemcinin kendi dilinde çevireceği mesaj anahtarı.
         """
         if not self.basladi or self.bitti:
-            return False, 'Game is not active.', 0
+            return False, 'not_active', 0
 
         oyuncu = self.oyuncular.get(player_id)
         if not oyuncu:
-            return False, 'You are not in this room.', 0
+            return False, 'not_in_room', 0
 
         if oyuncu['no'] != self.siradaki_no:
-            return False, 'Not your turn!', 0
+            return False, 'not_your_turn', 0
 
         kelime = kelime.strip().lower()
         if not kelime or not kelime.isalpha():
-            return False, 'Invalid word.', 0
+            return False, 'invalid', 0
 
         if kelime in self.kullanilan:
-            return False, 'This word was already used!', 0
+            return False, 'already_used', 0
 
         if kelime[0] != self.gerekli_harf:
-            return False, f'Must start with "{self.gerekli_harf.upper()}"!', 0
+            return False, 'must_start', 0
 
-        if SOZLUK and kelime not in SOZLUK:
-            return False, 'Not a valid English word!', 0
+        if self.sozluk and kelime not in self.sozluk:
+            return False, 'not_valid', 0
 
         # ── Success ──
         puan = kelime_puani(kelime)
@@ -168,7 +193,7 @@ class GameRoom:
         self.gerekli_harf = kelime[-1]
         self.siradaki_no = 2 if self.siradaki_no == 1 else 1
         self.hamle_sure = self.varsayilan_hamle   # reset turn timer when turn passes
-        return True, f'+{puan} pts!', puan
+        return True, 'points', puan
 
     def sure_guncelle(self):
         """Gerçek zamana göre süreleri düşürür. Süre bittiyse oyunu bitirir."""
@@ -213,4 +238,5 @@ class GameRoom:
             'kazanan': self.kazanan() if self.bitti else None,
             'ayrilan_ad': self.ayrilan_ad,   # rakip ayrıldıysa adı
             'rematch_sayisi': len(self.rematch_isteyenler),
+            'dict_lang': self.dict_lang,     # aktif sözlük dili
         }

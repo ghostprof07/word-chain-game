@@ -27,16 +27,16 @@ class NetworkClient:
         self.bagli = False
 
     # ── Oda oluşturma (HTTP) ──────────────────────────────────────────────────
-    def oda_olustur(self, callback, sure=300, hamle=20):
+    def oda_olustur(self, callback, sure=300, hamle=20, dil='en'):
         """
-        Sunucudan yeni oda kodu ister (seçilen süreyle).
+        Sunucudan yeni oda kodu ister (seçilen süre + sözlük diliyle).
         callback(kod_veya_None) ana thread'de çağrılır.
         """
         def _run():
             try:
                 r = requests.post(
                     f'{self.http}/oda-olustur',
-                    params={'sure': sure, 'hamle': hamle},
+                    params={'sure': sure, 'hamle': hamle, 'dil': dil},
                     timeout=8,
                 )
                 kod = r.json().get('oda')

@@ -53,14 +53,15 @@ async def kok():
 
 
 @app.post("/oda-olustur")
-async def oda_olustur(sure: int = 300, hamle: int = 20):
+async def oda_olustur(sure: int = 300, hamle: int = 20, dil: str = "en"):
     """
     Yeni bir oda oluşturur ve kodunu döndürür.
     sure:  toplam oyun süresi (saniye) — oda kuran kişi seçer
     hamle: her hamle süresi (saniye)
+    dil:   sözlük (kelime doğrulama) dili — oda kuran kişi seçer
     """
     kod = yeni_oda_kodu()
-    ODALAR[kod] = GameRoom(kod, toplam_sure=sure, hamle_sure=hamle)
+    ODALAR[kod] = GameRoom(kod, toplam_sure=sure, hamle_sure=hamle, dict_lang=dil)
     BAGLANTILAR[kod] = {}
     return JSONResponse({"oda": kod})
 
@@ -101,7 +102,7 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
 
     no = oda.oyuncu_ekle(player_id, ad)
     if no is None:
-        await websocket.send_text(json.dumps({'tip': 'hata', 'mesaj': 'Room is full!'}))
+        await websocket.send_text(json.dumps({'tip': 'hata', 'kod': 'room_full'}))
         await websocket.close()
         return
 
@@ -129,13 +130,15 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
 
             if tip == 'kelime':
                 kelime = veri.get('kelime', '')
-                basari, mesaj, puan = oda.kelime_oyna(player_id, kelime)
-                # Deneme sonucunu sadece denemeyi yapana bildir
+                basari, kod_msg, puan = oda.kelime_oyna(player_id, kelime)
+                # Deneme sonucunu sadece denemeyi yapana bildir.
+                # 'kod' istemcide kendi diline çevrilir; 'harf' must_start için gerekli.
                 await websocket.send_text(json.dumps({
                     'tip': 'kelime_sonuc',
                     'basari': basari,
-                    'mesaj': mesaj,
+                    'kod': kod_msg,
                     'puan': puan,
+                    'harf': oda.gerekli_harf,
                 }))
                 # Başarılıysa herkese yeni durumu yay
                 if basari:
