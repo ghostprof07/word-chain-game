@@ -30,6 +30,7 @@ ALFABELER = {
     'de': 'abcdefghijklmnopqrstuvwxyz',
     'es': 'abcdefghijklmnopqrstuvwxyzñ',
     'fr': 'abcdefghijklmnopqrstuvwxyz',
+    'ru': 'абвгдежзийклмнопрстуфхцчшщъыьэюя',  # ё, е'ye katlanır
 }
 
 # Bu dillerde aksanlar taban harfe indirilir (mobilde aksan yazmak zor +
@@ -37,13 +38,19 @@ ALFABELER = {
 SADELESTIR = {'de', 'es', 'fr'}
 _OZEL_HARF = {'ß': 'ss', 'œ': 'oe', 'æ': 'ae'}
 
-# Zincirde sonraki başlangıç harfi: bazı harflerle hiçbir kelime başlamaz.
-# tr: 'ğ' ile kelime başlamaz -> bir sonraki harf 'g' kabul edilir.
+# Tek harf eşlemesi: kelime sonu harfi -> sonraki başlangıç harfi.
+# tr: 'ğ' ile kelime başlamaz -> 'g' kabul edilir.
 _ZINCIR_HARF = {'tr': {'ğ': 'g'}}
+# Kelime SONUNDA bu harfler atlanır (onlarla kelime başlamaz); bir önceki harfe
+# gerilenir. ru: ь/ъ/ы (yumuşak/sert işaret ve ы ile kelime başlamaz).
+_ATLANAN_SON = {'ru': set('ьъы')}
 
 
 def _aksan_sadelestir(metin, dil):
-    """de/es/fr'de aksanları taban harfe indirir (ñ İspanyolca'da korunur)."""
+    """Sözlük/girdi normalizasyonu: de/es/fr aksanları taban harfe indirir
+    (ñ korunur); ru'da ё->е (й/ы/ь ayrı korunur)."""
+    if dil == 'ru':
+        return metin.replace('ё', 'е')
     if dil not in SADELESTIR:
         return metin
     out = []
@@ -59,8 +66,14 @@ def _aksan_sadelestir(metin, dil):
     return ''.join(out)
 
 
-def _zincir_harf(harf, dil):
-    """Kelimenin son harfine göre sonraki başlangıç harfini verir (tr ğ->g)."""
+def _sonraki_harf(kelime, dil):
+    """Kelimenin sonuna göre bir sonraki başlangıç harfini verir.
+    ru: sonda ь/ъ/ы varsa bir önceki harfe gerilenir; tr: ğ->g."""
+    atlanan = _ATLANAN_SON.get(dil, ())
+    i = len(kelime) - 1
+    while i > 0 and kelime[i] in atlanan:
+        i -= 1
+    harf = kelime[i] if kelime else ''
     return _ZINCIR_HARF.get(dil, {}).get(harf, harf)
 
 
@@ -77,7 +90,7 @@ def _sozlukleri_yukle():
         p = os.path.join(d, f'words_{kod}.txt')
         if os.path.exists(p):
             ham = _sozluk_yukle_dosya(p)
-            if kod in SADELESTIR:
+            if kod in SADELESTIR or kod == 'ru':
                 ham = {_aksan_sadelestir(w, kod) for w in ham}
             sozlukler[kod] = ham
 
@@ -268,8 +281,8 @@ class GameRoom:
         self.kullanilan.add(kelime)
         self.zincir.append({'kelime': kelime, 'no': oyuncu['no'], 'puan': puan})
         self.son_kelime = kelime
-        # Sonraki başlangıç harfi (tr 'ğ' -> 'g' gibi tıkanmaları çöz)
-        self.gerekli_harf = _zincir_harf(kelime[-1], self.dict_lang)
+        # Sonraki başlangıç harfi (tr ğ->g; ru sonda ь/ъ/ы atlanır)
+        self.gerekli_harf = _sonraki_harf(kelime, self.dict_lang)
         self.siradaki_no = 2 if self.siradaki_no == 1 else 1
         self.hamle_sure = self.varsayilan_hamle   # reset turn timer when turn passes
         return True, 'points', puan

@@ -70,6 +70,7 @@ SOZLUK_DILLERI = {
     'de': 'Deutsch',
     'es': 'Español',
     'fr': 'Français',
+    'ru': 'Русский',
 }
 
 
