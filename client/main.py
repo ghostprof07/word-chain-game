@@ -286,28 +286,86 @@ class BaglanEkrani(Screen):
 class LobiEkrani(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
-        kok = BoxLayout(orientation='vertical', padding=dp(28), spacing=dp(16))
+        kok = BoxLayout(orientation='vertical', padding=dp(28), spacing=dp(14))
         kart(kok, renk=KOYU)
 
-        kok.add_widget(Label())
-        kok.add_widget(etiket(t('room_code'), boyut=14, renk=(0.5, 0.5, 0.5, 1)))
+        kok.add_widget(Label(size_hint_y=None, height=dp(10)))
+        kok.add_widget(etiket(t('room_code'), boyut=14, renk=(0.5, 0.5, 0.5, 1),
+                              size_hint_y=None, height=dp(20)))
         self.kod_lbl = etiket('----', boyut=56, kalin=True, renk=YESIL)
         self.kod_lbl.size_hint_y = None
         self.kod_lbl.height = dp(80)
         kok.add_widget(self.kod_lbl)
-        kok.add_widget(etiket(t('share_code'), boyut=13, renk=(0.6, 0.6, 0.6, 1)))
+        self.alt_bilgi = etiket(t('share_code'), boyut=13, renk=(0.6, 0.6, 0.6, 1),
+                                size_hint_y=None, height=dp(20))
+        kok.add_widget(self.alt_bilgi)
 
-        kok.add_widget(Label(size_hint_y=None, height=dp(20)))
-        kok.add_widget(etiket(t('waiting_opponent'), boyut=16, renk=SARI))
+        kok.add_widget(Label(size_hint_y=None, height=dp(14)))
 
-        kok.add_widget(Label())
+        # Dinamik orta alan: bekleme  ↔  hazır+geri sayım+chat
+        self._orta = BoxLayout(orientation='vertical', spacing=dp(8))
+        kok.add_widget(self._orta)
+
         kok.add_widget(buton(t('cancel'), renk_bg=GENC, renk_yazi=(0.8, 0.8, 0.8, 1),
                              callback=lambda *_: App.get_running_app().odadan_cik()))
         kok.add_widget(Label(size_hint_y=None, height=dp(10)))
         self.add_widget(kok)
+        self._hazir_kuruldu = False
+        self._bekleme_goster()
 
     def kodu_ayarla(self, kod):
         self.kod_lbl.text = kod
+        self._bekleme_goster()
+
+    def _bekleme_goster(self):
+        """Tek başına rakip bekleme durumu."""
+        self._hazir_kuruldu = False
+        self.alt_bilgi.text = t('share_code')
+        self._orta.clear_widgets()
+        self._orta.add_widget(Label())
+        self._orta.add_widget(etiket(t('waiting_opponent'), boyut=16, renk=SARI,
+                                     size_hint_y=None, height=dp(28)))
+        self._orta.add_widget(Label())
+
+    def hazir_guncelle(self, d):
+        """İkisi de katıldı: isimler + geri sayım + chat (kısa lobi)."""
+        oyuncular = d.get('oyuncular', {})
+        n = d.get('geri_sayim')
+        n = max(0, n) if n is not None else 0
+        if not self._hazir_kuruldu:
+            self._hazir_kuruldu = True
+            self.alt_bilgi.text = ''
+            self._orta.clear_widgets()
+            self._orta.add_widget(Label(size_hint_y=None, height=dp(4)))
+            isimler = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
+            isimler.add_widget(etiket(oyuncular.get('1', f"{t('player')} 1"),
+                                      boyut=17, kalin=True, renk=YESIL))
+            isimler.add_widget(etiket('vs', boyut=13, renk=(0.5, 0.5, 0.5, 1),
+                                      size_hint_x=None, width=dp(34)))
+            isimler.add_widget(etiket(oyuncular.get('2', f"{t('player')} 2"),
+                                      boyut=17, kalin=True, renk=MAVI))
+            self._orta.add_widget(isimler)
+            self._orta.add_widget(etiket(t('get_ready'), boyut=15,
+                                         renk=(0.6, 0.6, 0.6, 1),
+                                         size_hint_y=None, height=dp(22)))
+            self._geri_lbl = etiket(t('starting_in', n=n), boyut=18, kalin=True,
+                                    renk=SARI, size_hint_y=None, height=dp(30))
+            self._orta.add_widget(self._geri_lbl)
+            self._orta.add_widget(Label(size_hint_y=None, height=dp(6)))
+            chat = ikon_buton(ciz_sohbet_ikonu, renk_bg=MAVI,
+                              callback=lambda *_: App.get_running_app().sohbet_ac())
+            chat.size_hint = (None, None)
+            chat.width = dp(60)
+            chat.height = dp(48)
+            chat.pos_hint = {'center_x': 0.5}
+            self._orta.add_widget(chat)
+            self._orta.add_widget(etiket(t('lobby_chat_hint'), boyut=11,
+                                         renk=(0.45, 0.45, 0.45, 1),
+                                         size_hint_y=None, height=dp(16)))
+            self._orta.add_widget(Label())
+        else:
+            # Sadece geri sayım sayısını güncelle (her saniye).
+            self._geri_lbl.text = t('starting_in', n=n)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -793,17 +851,22 @@ class WordChainOnlineApp(App):
             self.sm.current = 'sonuc'
 
     def _durum_isle(self, d):
-        if d.get('basladi') and not d.get('bitti'):
-            if self.sm.current in ('lobi', 'ayarlar'):
-                self.sm.current = 'oyun'
-            if self.sm.current == 'oyun':
-                self.sm.get_screen('oyun').durum_guncelle(d)
-        elif d.get('bitti'):
+        if d.get('bitti'):
             if self.sm.current == 'sonuc':
                 self.sm.get_screen('sonuc').guncelle(d)
             else:
                 self.sm.get_screen('sonuc').goster(d, self._benim_no)
                 self.sm.current = 'sonuc'
+        elif d.get('basladi'):
+            if self.sm.current in ('lobi', 'ayarlar'):
+                self.sm.current = 'oyun'
+            if self.sm.current == 'oyun':
+                self.sm.get_screen('oyun').durum_guncelle(d)
+        elif d.get('geri_sayim') is not None:
+            # İkisi de katıldı: kısa lobi geri sayımı (chat açık).
+            if self.sm.current in ('lobi', 'ayarlar'):
+                self.sm.current = 'lobi'
+            self.sm.get_screen('lobi').hazir_guncelle(d)
 
     # ── SOHBET ───────────────────────────────────────────────────────────────
     @staticmethod

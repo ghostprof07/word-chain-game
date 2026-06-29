@@ -72,7 +72,13 @@ async def sure_dongusu():
     while True:
         await asyncio.sleep(1)
         for kod, oda in list(ODALAR.items()):
-            if oda.basladi and not oda.bitti:
+            if oda.geri_sayim is not None and not oda.basladi and not oda.bitti:
+                # Kısa lobi: geri sayımı işle, 0'da oyun başlar.
+                basladi_simdi = oda.geri_sayim_tik()
+                await odaya_yayinla(kod, oda.durum())
+                if basladi_simdi:
+                    await odaya_yayinla(kod, {**oda.durum(), 'tip': 'yeni_oyun'})
+            elif oda.basladi and not oda.bitti:
                 onceki_bitti = oda.bitti
                 oda.sure_guncelle()
                 # Süre dolduysa ya da her saniye durumu yay

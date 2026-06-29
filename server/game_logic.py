@@ -7,6 +7,9 @@ import random
 import string
 import time
 
+# İki oyuncu da katılınca oyun başlamadan önceki kısa lobi geri sayımı (saniye).
+LOBI_GERI_SAYIM = 5
+
 # ── Scrabble harf puanları ────────────────────────────────────────────────────
 PUAN = {
     'a': 1, 'b': 3, 'c': 3, 'd': 2, 'e': 1, 'f': 4, 'g': 2, 'h': 4,
@@ -100,6 +103,9 @@ class GameRoom:
         # ya da oyundan çıktı. Bu set olunca kazanan PUANA değil bu kurala göre
         # belirlenir; rakip kazanır.
         self.kaybeden_no = None
+        # Kısa lobi geri sayımı (saniye): iki oyuncu da katılınca set edilir,
+        # her saniye azalır, 0'da oyun otomatik başlar. None = lobi yok.
+        self.geri_sayim = None
         self.toplam_sure = self.varsayilan_toplam
         self.hamle_sure = self.varsayilan_hamle
         self.son_tik = time.time()
@@ -113,14 +119,30 @@ class GameRoom:
             return None
         no = 1 if not self.oyuncular else 2
         self.oyuncular[player_id] = {'ad': ad, 'no': no}
-        if len(self.oyuncular) == 2:
-            self.basladi = True
-            # Oyun gerçekten şimdi başlıyor — zamanlayıcıyı baştan kur
-            # (lobby'de geçen bekleme süresi orta oyuna sayılmasın)
-            self.toplam_sure = self.varsayilan_toplam
-            self.hamle_sure = self.varsayilan_hamle
-            self.son_tik = time.time()
+        if len(self.oyuncular) == 2 and not self.basladi and not self.bitti:
+            # İki oyuncu da geldi: hemen başlatma — kısa lobi geri sayımı başlat.
+            # 0'a inince _oyunu_baslat() çağrılır (sunucu zamanlayıcı döngüsünde).
+            self.geri_sayim = LOBI_GERI_SAYIM
         return no
+
+    def _oyunu_baslat(self):
+        """Geri sayım bitince oyunu fiilen başlatır (zamanlayıcıyı sıfırlar)."""
+        self.basladi = True
+        self.geri_sayim = None
+        self.toplam_sure = self.varsayilan_toplam
+        self.hamle_sure = self.varsayilan_hamle
+        self.son_tik = time.time()
+
+    def geri_sayim_tik(self):
+        """Lobi geri sayımını bir saniye azaltır; 0'da oyunu başlatır.
+        Oyun bu çağrıda başladıysa True döner."""
+        if self.geri_sayim is None or self.basladi or self.bitti:
+            return False
+        self.geri_sayim -= 1
+        if self.geri_sayim <= 0:
+            self._oyunu_baslat()
+            return True
+        return False
 
     def oyuncu_cikar(self, player_id):
         ayrilan = self.oyuncular.pop(player_id, None)
@@ -130,6 +152,9 @@ class GameRoom:
             self.ayrilan_ad = ayrilan['ad']
             self.kaybeden_no = ayrilan['no']
             self.bitti = True
+        # Lobi geri sayımı sırasında biri ayrılırsa sayımı iptal et (tekrar bekle).
+        if len(self.oyuncular) < 2:
+            self.geri_sayim = None
         self.rematch_isteyenler.discard(player_id)
 
     def oyuncu_adi(self, no):
@@ -254,4 +279,5 @@ class GameRoom:
             'ayrilan_ad': self.ayrilan_ad,   # rakip ayrıldıysa adı
             'rematch_sayisi': len(self.rematch_isteyenler),
             'dict_lang': self.dict_lang,     # aktif sözlük dili
+            'geri_sayim': self.geri_sayim,   # kısa lobi geri sayımı (yoksa None)
         }
