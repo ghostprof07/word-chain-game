@@ -681,9 +681,25 @@ class SonucEkrani(Screen):
 class AyarlarEkrani(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
-        self._kok = BoxLayout(orientation='vertical', padding=dp(24), spacing=dp(14))
-        kart(self._kok, renk=KOYU)
-        self.add_widget(self._kok)
+        dis = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(10))
+        kart(dis, renk=KOYU)
+        # Kaydırılabilir içerik (dil sayısı arttıkça taşmasın diye)
+        scroll = ScrollView(do_scroll_x=False)
+        self._kok = BoxLayout(orientation='vertical', spacing=dp(10),
+                              padding=[dp(8), dp(8)], size_hint_y=None)
+        self._kok.bind(minimum_height=self._kok.setter('height'))
+        scroll.add_widget(self._kok)
+        dis.add_widget(scroll)
+        # Sabit DONE butonu — liste uzasa da her zaman erişilebilir kalır
+        done_btn = buton(t('done'), boyut=15,
+                         callback=lambda *_: App.get_running_app().ana_menuye())
+        done_btn.size_hint = (None, None)
+        done_btn.height = dp(44)
+        done_btn.width = dp(200)
+        done_btn.pos_hint = {'center_x': 0.5}
+        dis.add_widget(done_btn)
+        dis.add_widget(Label(size_hint_y=None, height=dp(8)))
+        self.add_widget(dis)
         self.kur()
 
     def kur(self):
@@ -727,15 +743,7 @@ class AyarlarEkrani(Screen):
             self._sozluk_butonlar[kod] = b
             self._kok.add_widget(b)
 
-        self._kok.add_widget(Label())
-        done_btn = buton(t('done'), boyut=15,
-                         callback=lambda *_: App.get_running_app().ana_menuye())
-        done_btn.size_hint = (None, None)
-        done_btn.height = dp(44)
-        done_btn.width = dp(200)
-        done_btn.pos_hint = {'center_x': 0.5}
-        self._kok.add_widget(done_btn)
-        self._kok.add_widget(Label(size_hint_y=None, height=dp(10)))
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(8)))
 
     def _app_dili_sec(self, kod):
         App.get_running_app().app_dili_degistir(kod)
