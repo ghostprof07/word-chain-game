@@ -36,7 +36,7 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 
 Window.softinput_mode = 'below_target'
-from kivy.graphics import Color, RoundedRectangle
+from kivy.graphics import Color, RoundedRectangle, Line, Ellipse
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -127,6 +127,61 @@ def giris_kutusu(hint, **kw):
     return ti
 
 
+# ── İkonlar (canvas ile çizilir; emoji fontuna ihtiyaç yok, her cihazda çalışır) ─
+def ikon_buton(ciz_fn, renk_bg=GENC, callback=None, radius=14):
+    """Canvas'a vektörel ikon çizilen buton. ciz_fn(btn) ikonu çizer."""
+    btn = Button(background_normal='', background_color=(0, 0, 0, 0))
+    kart(btn, renk=renk_bg, radius=radius)
+    btn.bind(pos=lambda *a: ciz_fn(btn), size=lambda *a: ciz_fn(btn))
+    if callback:
+        btn.bind(on_press=callback)
+    return btn
+
+
+def ciz_ayar_ikonu(btn, renk=(0.85, 0.85, 0.85, 1)):
+    """Ayarlar (kaydırıcı/tune) ikonu: 3 yatay çizgi + birer tutamak."""
+    btn.canvas.after.clear()
+    w, h = btn.width, btn.height
+    m = min(w, h)
+    x0 = btn.center_x - m * 0.28
+    x1 = btn.center_x + m * 0.28
+    r = m * 0.085
+    with btn.canvas.after:
+        for ry, kf in ((0.66, 0.72), (0.5, 0.34), (0.34, 0.62)):
+            yy = btn.y + h * ry
+            Color(*renk)
+            Line(points=[x0, yy, x1, yy], width=dp(1.6))
+            kx = x0 + (x1 - x0) * kf
+            Color(*GENC)                      # tutamak içi (arka plan rengi)
+            Ellipse(pos=(kx - r, yy - r), size=(2 * r, 2 * r))
+            Color(*renk)
+            Line(circle=(kx, yy, r), width=dp(1.6))
+
+
+def ciz_sohbet_ikonu(btn, renk=(0, 0, 0, 1)):
+    """Konuşma balonu ikonu + okunmamış varsa kırmızı nokta rozeti."""
+    btn.canvas.after.clear()
+    m = min(btn.width, btn.height)
+    bw, bh = m * 0.60, m * 0.46
+    x = btn.center_x - bw / 2
+    y = btn.center_y - bh / 2 + m * 0.05
+    with btn.canvas.after:
+        Color(*renk)
+        Line(rounded_rectangle=(x, y, bw, bh, m * 0.12), width=dp(1.8))
+        Line(points=[x + bw * 0.24, y, x + bw * 0.12, y - m * 0.13,
+                     x + bw * 0.42, y], width=dp(1.8))
+        dr = m * 0.035
+        for k in range(3):
+            dx = x + bw * 0.28 + k * bw * 0.22
+            Ellipse(pos=(dx - dr, btn.center_y + m * 0.05 - dr),
+                    size=(2 * dr, 2 * dr))
+        if getattr(btn, '_rozet', False):     # okunmamış mesaj göstergesi
+            br = m * 0.13
+            Color(*KIRMIZI)
+            Ellipse(pos=(btn.right - br * 2.0, btn.top - br * 2.0),
+                    size=(2 * br, 2 * br))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  1. CONNECT SCREEN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -139,8 +194,8 @@ class BaglanEkrani(Screen):
         # Üst satır: başlık + ayarlar butonu
         ust = BoxLayout(size_hint_y=None, height=dp(34))
         ust.add_widget(Label())  # esnek boşluk
-        ayar_btn = buton('⚙', renk_bg=GENC, renk_yazi=(0.8, 0.8, 0.8, 1), boyut=18,
-                         callback=lambda *_: App.get_running_app().ayarlari_ac())
+        ayar_btn = ikon_buton(ciz_ayar_ikonu, renk_bg=GENC,
+                              callback=lambda *_: App.get_running_app().ayarlari_ac())
         ayar_btn.size_hint_x = None
         ayar_btn.width = dp(44)
         ust.add_widget(ayar_btn)
@@ -271,9 +326,8 @@ class OyunEkrani(Screen):
                                  renk=(0.5, 0.5, 0.5, 1), hizala='left')
         self.kelime_lbl = etiket(t('words_count', n=0), boyut=12,
                                  renk=(0.4, 0.4, 0.4, 1))
-        self.sohbet_btn = buton('\U0001F4AC', renk_bg=MAVI, renk_yazi=(0, 0, 0, 1),
-                                boyut=15,
-                                callback=lambda *_: App.get_running_app().sohbet_ac())
+        self.sohbet_btn = ikon_buton(ciz_sohbet_ikonu, renk_bg=MAVI,
+                                     callback=lambda *_: App.get_running_app().sohbet_ac())
         self.sohbet_btn.size_hint_x = None
         self.sohbet_btn.width = dp(52)
         cik = buton(t('quit'), renk_bg=GENC, renk_yazi=(0.6, 0.6, 0.6, 1), boyut=12,
@@ -616,8 +670,13 @@ class AyarlarEkrani(Screen):
             self._kok.add_widget(b)
 
         self._kok.add_widget(Label())
-        self._kok.add_widget(buton(t('done'),
-                                   callback=lambda *_: App.get_running_app().ana_menuye()))
+        done_btn = buton(t('done'), boyut=15,
+                         callback=lambda *_: App.get_running_app().ana_menuye())
+        done_btn.size_hint = (None, None)
+        done_btn.height = dp(44)
+        done_btn.width = dp(200)
+        done_btn.pos_hint = {'center_x': 0.5}
+        self._kok.add_widget(done_btn)
         self._kok.add_widget(Label(size_hint_y=None, height=dp(10)))
 
     def _app_dili_sec(self, kod):
@@ -764,7 +823,8 @@ class WordChainOnlineApp(App):
     def _sohbet_rozet_guncelle(self):
         try:
             btn = self.sm.get_screen('oyun').sohbet_btn
-            btn.text = f'\U0001F4AC {self._okunmamis}' if self._okunmamis else '\U0001F4AC'
+            btn._rozet = self._okunmamis > 0    # okunmamış varsa kırmızı nokta
+            ciz_sohbet_ikonu(btn)               # ikonu rozetle yeniden çiz
         except Exception:
             pass
 
