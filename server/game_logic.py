@@ -96,9 +96,10 @@ class GameRoom:
         self.siradaki_no = 1
         self.basladi = False
         self.bitti = False
-        # Hamle süresi dolduğu için kaybeden oyuncunun numarası (yoksa None).
-        # Bu set olunca kazanan PUANA değil bu kurala göre belirlenir.
-        self.sure_doldu_no = None
+        # Zorla kaybeden oyuncunun numarası (yoksa None): ya hamle süresi doldu
+        # ya da oyundan çıktı. Bu set olunca kazanan PUANA değil bu kurala göre
+        # belirlenir; rakip kazanır.
+        self.kaybeden_no = None
         self.toplam_sure = self.varsayilan_toplam
         self.hamle_sure = self.varsayilan_hamle
         self.son_tik = time.time()
@@ -123,9 +124,11 @@ class GameRoom:
 
     def oyuncu_cikar(self, player_id):
         ayrilan = self.oyuncular.pop(player_id, None)
-        # Oyun ortasında ayrılma: oyunu bitir, kalan oyuncuya bildir
+        # Oyun ortasında ayrılma: ayrılan oyuncu KAYBEDER (puanı ne olursa olsun),
+        # kalan oyuncu kazanır. Oyunu bitir ve kalan oyuncuya bildir.
         if ayrilan and self.basladi and not self.bitti:
             self.ayrilan_ad = ayrilan['ad']
+            self.kaybeden_no = ayrilan['no']
             self.bitti = True
         self.rematch_isteyenler.discard(player_id)
 
@@ -212,16 +215,16 @@ class GameRoom:
             # Hamle süresi bitti: sırası gelen oyuncu kelime giremedi -> KAYBEDER
             # (puanı yüksek olsa bile). Toplam süre bitişinde ise skora bakılır.
             if self.hamle_sure <= 0:
-                self.sure_doldu_no = self.siradaki_no
+                self.kaybeden_no = self.siradaki_no
                 self.bitti = True
             elif self.toplam_sure <= 0:
                 self.bitti = True
 
     def kazanan(self):
-        # Hamle süresi dolduğu için biten oyunda süresi dolan oyuncu kaybeder
+        # Hamle süresi dolan ya da oyundan çıkan oyuncu kaybeder
         # (puan farkı ne olursa olsun) — rakibi kazanır.
-        if self.sure_doldu_no:
-            return 2 if self.sure_doldu_no == 1 else 1
+        if self.kaybeden_no:
+            return 2 if self.kaybeden_no == 1 else 1
         if self.puan[1] > self.puan[2]:
             return 1
         if self.puan[2] > self.puan[1]:

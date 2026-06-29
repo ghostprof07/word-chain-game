@@ -473,7 +473,8 @@ class SonucEkrani(Screen):
         ayrilan = d.get('ayrilan_ad')
 
         if ayrilan:
-            yazi, renk = t('opponent_left'), SARI
+            # Rakip oyundan ayrıldı -> ayrılan kaybeder, kalan oyuncu kazanır.
+            yazi, renk = t('you_won'), YESIL
         elif kazanan == 0 or kazanan is None:
             yazi, renk = t('draw'), SARI
         elif kazanan == benim_no:
@@ -489,14 +490,18 @@ class SonucEkrani(Screen):
                                         renk=(0.6, 0.6, 0.6, 1)))
 
         oyuncular = d.get('oyuncular', {})
-        kutular = BoxLayout(size_hint_y=None, height=dp(100), spacing=dp(14))
+        # Kutu yüksekliği + sabit isim/pts yükseklikleri: büyük puan sayısı
+        # esnek orta alanı doldurur, hiçbir cihazda kırpılmadan tam görünür.
+        kutular = BoxLayout(size_hint_y=None, height=dp(120), spacing=dp(14))
         for no, c in [(1, YESIL), (2, MAVI)]:
-            kutu = BoxLayout(orientation='vertical', spacing=dp(4), padding=dp(12))
+            kutu = BoxLayout(orientation='vertical', spacing=dp(2), padding=dp(10))
             kart(kutu, renk=GENC)
             kutu.add_widget(etiket(oyuncular.get(str(no), f"{t('player')} {no}"),
-                                   boyut=11, kalin=True, renk=c))
-            kutu.add_widget(etiket(str(d['puan'][str(no)]), boyut=42, kalin=True))
-            kutu.add_widget(etiket(t('pts'), boyut=12, renk=(0.5, 0.5, 0.5, 1)))
+                                   boyut=12, kalin=True, renk=c,
+                                   size_hint_y=None, height=dp(20)))
+            kutu.add_widget(etiket(str(d['puan'][str(no)]), boyut=40, kalin=True))
+            kutu.add_widget(etiket(t('pts'), boyut=12, renk=(0.5, 0.5, 0.5, 1),
+                                   size_hint_y=None, height=dp(16)))
             kutular.add_widget(kutu)
         self._kok.add_widget(kutular)
 
