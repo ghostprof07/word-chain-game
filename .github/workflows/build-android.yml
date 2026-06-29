@@ -1,9 +1,14 @@
 name: Android APK Derle
 
-# Ne zaman çalışsın: main'e push'ta veya elle tetikleyince
+# Ne zaman çalışsın: istemci (APK'yı etkileyen) dosyalar değişince ya da elle.
+# paths sayesinde sadece sunucu/workflow değişikliklerinde gereksiz APK
+# derlemesi yapılmaz. Workflow'un kendisini değiştirince elle (workflow_dispatch)
+# ya da Actions sekmesinden "Run workflow" ile test edilebilir.
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'client/**'
   workflow_dispatch:
 
 jobs:

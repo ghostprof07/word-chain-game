@@ -96,6 +96,9 @@ class GameRoom:
         self.siradaki_no = 1
         self.basladi = False
         self.bitti = False
+        # Hamle süresi dolduğu için kaybeden oyuncunun numarası (yoksa None).
+        # Bu set olunca kazanan PUANA değil bu kurala göre belirlenir.
+        self.sure_doldu_no = None
         self.toplam_sure = self.varsayilan_toplam
         self.hamle_sure = self.varsayilan_hamle
         self.son_tik = time.time()
@@ -206,10 +209,19 @@ class GameRoom:
             self.son_tik = simdi
             self.toplam_sure -= azalt
             self.hamle_sure -= azalt
-            if self.toplam_sure <= 0 or self.hamle_sure <= 0:
+            # Hamle süresi bitti: sırası gelen oyuncu kelime giremedi -> KAYBEDER
+            # (puanı yüksek olsa bile). Toplam süre bitişinde ise skora bakılır.
+            if self.hamle_sure <= 0:
+                self.sure_doldu_no = self.siradaki_no
+                self.bitti = True
+            elif self.toplam_sure <= 0:
                 self.bitti = True
 
     def kazanan(self):
+        # Hamle süresi dolduğu için biten oyunda süresi dolan oyuncu kaybeder
+        # (puan farkı ne olursa olsun) — rakibi kazanır.
+        if self.sure_doldu_no:
+            return 2 if self.sure_doldu_no == 1 else 1
         if self.puan[1] > self.puan[2]:
             return 1
         if self.puan[2] > self.puan[1]:

@@ -1,0 +1,22 @@
+name: Sunucuyu uyanik tut
+
+# Render ucretsiz katmani 15 dk hareketsizlikte sunucuyu uykuya alir; o yuzden
+# ilk acilista ~50sn beklenir. Bu is her ~10 dk'da bir health ucuna ping atarak
+# sunucuyu uyanik tutar, boylece oyuncular cold start beklemez.
+#
+# Not: GitHub zamanlanmis isleri yogunlukta birkac dakika gecikebilir ve depo
+# 60 gun commitsiz kalirsa otomatik devre disi birakilir. Daha guvenilir
+# alternatif: UptimeRobot (ucretsiz, 5 dk) ile ayni URL'yi izlemek.
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # her 10 dakikada bir
+  workflow_dispatch:           # elle de tetiklenebilir
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health ping
+        run: |
+          curl -s -m 90 -o /dev/null -w "HTTP %{http_code} | sure %{time_total}s\n" \
+            https://wordchain-server.onrender.com/ || true
