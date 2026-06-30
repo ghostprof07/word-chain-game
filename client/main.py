@@ -878,6 +878,14 @@ class AyarlarEkrani(Screen):
         self._kok.add_widget(etiket(t('settings_title'), boyut=24, kalin=True,
                                     renk=YESIL, size_hint_y=None, height=dp(36)))
 
+        # ── İstatistikler butonu ──
+        ist_btn = buton(t('statistics'), renk_bg=MOR, boyut=15,
+                        callback=lambda *_: self._istatistik_popup())
+        ist_btn.size_hint_y = None
+        ist_btn.height = dp(46)
+        self._kok.add_widget(ist_btn)
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(8)))
+
         # ── BÖLÜM 1: Uygulama Dili ──
         self._kok.add_widget(etiket(t('app_language'), boyut=15, kalin=True,
                                     hizala='left', size_hint_y=None, height=dp(24)))
@@ -920,6 +928,38 @@ class AyarlarEkrani(Screen):
         app.sozluk_dili_degistir(kod)
         for k, b in self._sozluk_butonlar.items():
             secim_vurgu(b, k == kod, renk_secili=MAVI)
+
+    def _istatistik_popup(self):
+        app = App.get_running_app()
+        st = app.istatistik()
+        g = st.get('games', 0)
+        w, l, dr = st.get('wins', 0), st.get('losses', 0), st.get('draws', 0)
+        oran = f'{round(100 * w / g)}%' if g else '—'
+        satirlar = [
+            (t('games'), g), (t('wins'), w), (t('losses'), l), (t('draws'), dr),
+            (t('win_rate'), oran), (t('words_played'), st.get('words', 0)),
+            (t('best_word'), st.get('best_word', 0)),
+        ]
+        icerik = BoxLayout(orientation='vertical', spacing=dp(2), padding=dp(14))
+        for ad, deger in satirlar:
+            satir = BoxLayout(size_hint_y=None, height=dp(36))
+            satir.add_widget(etiket(ad, boyut=14, renk=(0.7, 0.7, 0.7, 1), hizala='left'))
+            satir.add_widget(etiket(str(deger), boyut=17, kalin=True, hizala='right'))
+            icerik.add_widget(satir)
+        pop = Popup(title=t('statistics'), content=icerik, size_hint=(0.88, None),
+                    height=dp(430), title_color=(1, 1, 1, 1), separator_color=MOR)
+        icerik.add_widget(Label(size_hint_y=None, height=dp(6)))
+        rb = buton(t('reset'), renk_bg=GENC, renk_yazi=(0.85, 0.85, 0.85, 1), boyut=13)
+        rb.size_hint_y = None
+        rb.height = dp(42)
+
+        def _sifirla(*_):
+            app.ayar['stats'] = {}
+            settings_store.kaydet(app.user_data_dir, app.ayar)
+            pop.dismiss()
+        rb.bind(on_press=_sifirla)
+        icerik.add_widget(rb)
+        pop.open()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1043,6 +1083,7 @@ class WordChainOnlineApp(App):
         self._sohbet_kutu = None
         self._okunmamis = 0
         self.offline = None   # offline (bota karşı/antrenman) motoru; yoksa online
+        self._oyun_kayitli = False   # bu oyun istatistiğe kaydedildi mi (tek sefer)
 
         self.sm = ScreenManager(transition=FadeTransition(duration=0.2))
         self._ekranlari_kur()
@@ -1139,6 +1180,36 @@ class WordChainOnlineApp(App):
             best[dil] = skor
             settings_store.kaydet(self.user_data_dir, self.ayar)
 
+    # ── İstatistik ───────────────────────────────────────────────────────────
+    def istatistik(self):
+        return self.ayar.setdefault('stats', {})
+
+    def _istatistik_kaydet(self, d):
+        """Oyun bitince (bir kez) istatistiği günceller — son durumdan hesaplanır."""
+        if self._oyun_kayitli:
+            return
+        self._oyun_kayitli = True
+        st = self.istatistik()
+        zincir = d.get('zincir', [])
+        benim = [z for z in zincir if z.get('no') == self._benim_no]
+        st['words'] = st.get('words', 0) + len(benim)
+        en_iyi_kelime = max((z.get('puan', 0) for z in benim), default=0)
+        if en_iyi_kelime > st.get('best_word', 0):
+            st['best_word'] = en_iyi_kelime
+        if d.get('mod') != 'training':   # antrenmanda galip/mağlup yok
+            st['games'] = st.get('games', 0) + 1
+            if d.get('ayrilan_ad'):                       # rakip ayrıldı -> kazandın
+                st['wins'] = st.get('wins', 0) + 1
+            else:
+                kz = d.get('kazanan')
+                if kz == self._benim_no:
+                    st['wins'] = st.get('wins', 0) + 1
+                elif kz in (0, None):
+                    st['draws'] = st.get('draws', 0) + 1
+                else:
+                    st['losses'] = st.get('losses', 0) + 1
+        settings_store.kaydet(self.user_data_dir, self.ayar)
+
     # ── Bağlantı yönetimi ────────────────────────────────────────────────────
     def baglan_ve_gec(self, oda_kodu, ad):
         self._offline_temizle()
@@ -1194,6 +1265,7 @@ class WordChainOnlineApp(App):
                 veri.get('harf'), veri.get('puan', 0))
 
         elif tip == 'yeni_oyun':
+            self._oyun_kayitli = False   # yeni oyun -> istatistik bayrağını sıfırla
             self.sm.get_screen('oyun').durum_guncelle(veri)
             self.sm.current = 'oyun'
 
@@ -1201,6 +1273,7 @@ class WordChainOnlineApp(App):
             self._durum_isle(veri)
 
         elif tip == 'oyun_bitti':
+            self._istatistik_kaydet(veri)
             self.sm.get_screen('sonuc').goster(veri, self._benim_no)
             self.sm.current = 'sonuc'
 
@@ -1209,10 +1282,12 @@ class WordChainOnlineApp(App):
             if self.sm.current == 'sonuc':
                 self.sm.get_screen('sonuc').guncelle(d)
             else:
+                self._istatistik_kaydet(d)
                 self.sm.get_screen('sonuc').goster(d, self._benim_no)
                 self.sm.current = 'sonuc'
         elif d.get('basladi'):
             if self.sm.current in ('lobi', 'ayarlar'):
+                self._oyun_kayitli = False   # oyun başladı -> bayrağı sıfırla
                 self.sm.current = 'oyun'
             if self.sm.current == 'oyun':
                 self.sm.get_screen('oyun').durum_guncelle(d)
