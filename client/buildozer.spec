@@ -24,10 +24,11 @@ requirements = python3,kivy==2.3.1,websocket-client,requests,certifi,openssl
 orientation = portrait
 fullscreen = 0
 
-# Açılış (yükleme) ekranı: markalı görsel + koyu mor zemin (tema ile uyumlu)
-# presplash.png saydam; coil + LEXICOIL wordmark presplash_color üzerinde ortalanır.
+# Açılış (yükleme) ekranı: tam ekran gradyan görsel (coil + LEXICOIL).
+# presplash.png 1080x2340 dikey; gradyan zemin. Kenarda bant çıkarsa diye
+# presplash_color gradyan-pembe tonunda (koyu yerine, harmanlansın).
 presplash.filename = %(source.dir)s/presplash.png
-android.presplash_color = #0F0D1A
+android.presplash_color = #FF4B96
 
 # ── İZİNLER ───────────────────────────────────────────────────────────────────
 # INTERNET: online oyun için zorunlu
