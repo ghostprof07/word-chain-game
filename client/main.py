@@ -1046,7 +1046,26 @@ class WordChainOnlineApp(App):
 
         self.sm = ScreenManager(transition=FadeTransition(duration=0.2))
         self._ekranlari_kur()
+        # Android geri tuşu (ESC=27): uygulamadan çıkmak yerine ekranlar arası geri git
+        Window.bind(on_keyboard=self._geri_tusu)
         return self.sm
+
+    def _geri_tusu(self, window, key, *args):
+        """Android geri tuşu / ESC — ekrana göre geri gider; ana ekranda çıkışa izin verir."""
+        if key != 27:
+            return False
+        # Açık bir popup (sohbet / zorluk) varsa onu kapatması için Kivy'ye bırak
+        from kivy.uix.modalview import ModalView
+        if any(isinstance(w, ModalView) for w in window.children):
+            return False
+        cur = self.sm.current
+        if cur == 'ayarlar':
+            self.ana_menuye()
+            return True            # olayı tüket -> uygulama kapanmaz
+        if cur in ('lobi', 'oyun', 'sonuc'):
+            self.odadan_cik()
+            return True
+        return False               # 'baglan' (ana ekran): çıkışa izin ver
 
     def _ekranlari_kur(self):
         """Ekranları (yeniden) oluşturur — dil değişince çağrılır."""
