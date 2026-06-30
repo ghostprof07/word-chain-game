@@ -24,7 +24,9 @@ requirements = python3,kivy==2.3.1,websocket-client,requests,certifi,openssl
 orientation = portrait
 fullscreen = 0
 
-# Açılış ekranı rengi (koyu mor — tema ile uyumlu)
+# Açılış (yükleme) ekranı: markalı görsel + koyu mor zemin (tema ile uyumlu)
+# presplash.png saydam; coil + LEXICOIL wordmark presplash_color üzerinde ortalanır.
+presplash.filename = %(source.dir)s/presplash.png
 android.presplash_color = #0F0D1A
 
 # ── İZİNLER ───────────────────────────────────────────────────────────────────
