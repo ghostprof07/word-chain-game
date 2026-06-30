@@ -339,16 +339,27 @@ class BaglanEkrani(Screen):
         icerik.add_widget(etiket(t('difficulty'), boyut=12, renk=(0.6, 0.6, 0.6, 1),
                                  size_hint_y=None, height=dp(20)))
         pop = Popup(title=t('solo_title'), content=icerik, size_hint=(0.9, None),
-                    height=dp(340), title_color=(1, 1, 1, 1), separator_color=MOR)
+                    height=dp(430), title_color=(1, 1, 1, 1), separator_color=MOR)
         for kod, etik, renk in (('kolay', t('easy'), YESIL),
                                 ('orta', t('medium'), SARI),
                                 ('zor', t('hard'), KIRMIZI)):
             b = buton(etik, renk_bg=renk, renk_yazi=(0, 0, 0, 1))
             b.size_hint_y = None
-            b.height = dp(52)
+            b.height = dp(50)
             b.bind(on_press=lambda _b, z=kod: (
                 pop.dismiss(), App.get_running_app().bota_karsi_basla(z)))
             icerik.add_widget(b)
+
+        # ── Antrenman (solo) ──
+        icerik.add_widget(etiket(t('training'), boyut=15, kalin=True, renk=MOR,
+                                 size_hint_y=None, height=dp(26)))
+        tb = buton(t('training_desc'), renk_bg=GENC, renk_yazi=(0.85, 0.85, 0.85, 1),
+                   boyut=13)
+        tb.size_hint_y = None
+        tb.height = dp(50)
+        tb.bind(on_press=lambda _b: (
+            pop.dismiss(), App.get_running_app().training_basla()))
+        icerik.add_widget(tb)
         icerik.add_widget(Label())
         pop.open()
 
@@ -580,6 +591,11 @@ class OyunEkrani(Screen):
         self.sohbet_btn.opacity = 1 if goster else 0
         self.sohbet_btn.disabled = not goster
 
+    def training_mode(self, aktif):
+        """Solo antrenmanda rakip (P2) kutusunu gizle, P1 tüm satırı kaplasın."""
+        self.p2_kutu.size_hint_x = 0.001 if aktif else 1
+        self.p2_kutu.opacity = 0 if aktif else 1
+
     def _gonder(self):
         kelime = self.giris.text.strip().lower()
         self.giris.text = ''
@@ -688,6 +704,9 @@ class SonucEkrani(Screen):
     def goster(self, d, benim_no):
         self._kok.clear_widgets()
         self._benim_no = benim_no
+        if d.get('mod') == 'training':
+            self._goster_training(d)
+            return
         p1, p2 = d['puan']['1'], d['puan']['2']
         kazanan = d.get('kazanan')
         ayrilan = d.get('ayrilan_ad')
@@ -760,6 +779,42 @@ class SonucEkrani(Screen):
         else:
             self._rematch_btn = None
 
+        self._kok.add_widget(buton(t('main_menu'), renk_bg=GENC,
+                                   renk_yazi=(0.8, 0.8, 0.8, 1),
+                                   callback=lambda *_: App.get_running_app().odadan_cik()))
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(12)))
+
+    def _goster_training(self, d):
+        """Solo antrenman sonucu: skor + en iyi skor."""
+        app = App.get_running_app()
+        skor = d['puan']['1']
+        eniyi = app.en_iyi(d.get('dict_lang', 'en'))
+
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(16)))
+        self._kok.add_widget(etiket(t('game_over'), boyut=13, renk=(0.5, 0.5, 0.5, 1),
+                                    size_hint_y=None, height=dp(20)))
+        self._kok.add_widget(etiket(t('training'), boyut=22, kalin=True, renk=PEMBE,
+                                    size_hint_y=None, height=dp(34)))
+        self._kok.add_widget(etiket(str(skor), boyut=64, kalin=True, renk=YESIL,
+                                    size_hint_y=None, height=dp(92)))
+        self._kok.add_widget(etiket(t('pts'), boyut=13, renk=(0.5, 0.5, 0.5, 1),
+                                    size_hint_y=None, height=dp(20)))
+        self._kok.add_widget(etiket(t('best_score', n=eniyi), boyut=16, kalin=True,
+                                    renk=SARI, size_hint_y=None, height=dp(30)))
+
+        self._kok.add_widget(Label(size_hint_y=None, height=dp(10)))
+        self._kok.add_widget(etiket(t('words_used'), boyut=12, renk=(0.5, 0.5, 0.5, 1),
+                                    size_hint_y=None, height=dp(18)))
+        kelimeler = d.get('kullanilan', [])
+        self._kok.add_widget(etiket('  '.join(kelimeler) if kelimeler else '—',
+                                    boyut=13, renk=(0.7, 0.7, 0.7, 1)))
+
+        self._kok.add_widget(Label())
+        self._rematch_btn = gradyan_buton(t('play_again'),
+                                          callback=lambda *_: self._rematch_iste())
+        self._rematch_btn.size_hint_y = None
+        self._rematch_btn.height = dp(54)
+        self._kok.add_widget(self._rematch_btn)
         self._kok.add_widget(buton(t('main_menu'), renk_bg=GENC,
                                    renk_yazi=(0.8, 0.8, 0.8, 1),
                                    callback=lambda *_: App.get_running_app().odadan_cik()))
@@ -876,19 +931,28 @@ class OfflineMotor:
     sözlüklerini app._mesaj_geldi'ye besler — böylece tüm oyun/sonuç ekranı
     kodu aynen yeniden kullanılır. İnternet/sunucu gerektirmez.
     """
-    def __init__(self, app, oda, bot, zorluk):
+    def __init__(self, app, oda, bot, zorluk, training=False):
         self.app = app
         self.oda = oda
         self.bot = bot
         self.zorluk = zorluk
+        self.training = training   # True: solo antrenman (rakip yok)
         self._timer = None
         self._bot_ev = None
+
+    def _yolla(self, d):
+        """Mesajı app'e iletir; antrenman modunda 'mod' bayrağı ekler."""
+        if self.training:
+            d = {**d, 'mod': 'training'}
+        self.app._mesaj_geldi(d)
 
     def basla(self):
         self.oda._oyunu_baslat()
         self.app._benim_no = 1
-        self.app.sm.get_screen('oyun').benim_no_ayarla(1)
-        self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'yeni_oyun'})
+        oyun = self.app.sm.get_screen('oyun')
+        oyun.benim_no_ayarla(1)
+        oyun.training_mode(self.training)
+        self._yolla({**self.oda.durum(), 'tip': 'yeni_oyun'})
         self._timer = Clock.schedule_interval(self._tik, 1)
 
     def gonder(self, kelime):
@@ -896,12 +960,13 @@ class OfflineMotor:
         if self.oda.bitti:
             return
         basari, kod, puan = self.oda.kelime_oyna('human', kelime)
-        self.app._mesaj_geldi({'tip': 'kelime_sonuc', 'basari': basari,
-                               'kod': kod, 'puan': puan,
-                               'harf': self.oda.gerekli_harf})
+        self._yolla({'tip': 'kelime_sonuc', 'basari': basari,
+                     'kod': kod, 'puan': puan, 'harf': self.oda.gerekli_harf})
         if basari:
-            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'durum'})
-            if not self.oda.bitti and self.oda.siradaki_no == 2:
+            if self.training:
+                self.oda.siradaki_no = 1   # solo: sıra hep sende kalır
+            self._yolla({**self.oda.durum(), 'tip': 'durum'})
+            if not self.training and not self.oda.bitti and self.oda.siradaki_no == 2:
                 self._bot_planla()
 
     def _bot_planla(self):
@@ -918,7 +983,7 @@ class OfflineMotor:
             return   # bulamadı (çok nadir) -> süresi dolar
         basari, _kod, _puan = self.oda.kelime_oyna('bot', kelime)
         if basari:
-            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'durum'})
+            self._yolla({**self.oda.durum(), 'tip': 'durum'})
 
     def _tik(self, dt):
         if self.oda.bitti:
@@ -926,17 +991,22 @@ class OfflineMotor:
             return
         self.oda.sure_guncelle()
         if self.oda.bitti:
-            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'oyun_bitti'})
+            if self.training:   # antrenman: en iyi skoru güncelle
+                self.app.en_iyi_guncelle(self.oda.dict_lang, self.oda.puan[1])
+            self._yolla({**self.oda.durum(), 'tip': 'oyun_bitti'})
             self.dur()
         else:
-            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'durum'})
+            self._yolla({**self.oda.durum(), 'tip': 'durum'})
 
     def tekrar(self):
         """Tekrar oyna (offline) — yeni oyunu hemen başlatır."""
         self.dur()
         self.oda._yeni_oyun_durumu()
         self.oda._oyunu_baslat()
-        self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'yeni_oyun'})
+        oyun = self.app.sm.get_screen('oyun')
+        oyun.benim_no_ayarla(1)
+        oyun.training_mode(self.training)
+        self._yolla({**self.oda.durum(), 'tip': 'yeni_oyun'})
         self._timer = Clock.schedule_interval(self._tik, 1)
 
     def _bot_iptal(self):
@@ -1030,10 +1100,31 @@ class WordChainOnlineApp(App):
         self.sm.get_screen('oyun').sohbet_goster(False)   # offline: sohbet yok
         self.offline.basla()
 
+    # ── Offline: Antrenman (solo) ────────────────────────────────────────────
+    def training_basla(self):
+        from game_logic import GameRoom   # lazy
+        baglan = self.sm.get_screen('baglan')
+        oda = GameRoom('LOCAL', toplam_sure=baglan._secili_sure, hamle_sure=20,
+                       dict_lang=self.ayar['dict_lang'])
+        oda.oyuncu_ekle('human', baglan._ad() or t('player'))   # tek oyuncu
+        self.offline = OfflineMotor(self, oda, None, None, training=True)
+        self.sm.get_screen('oyun').sohbet_goster(False)
+        self.offline.basla()
+
+    def en_iyi(self, dil):
+        return self.ayar.get('best', {}).get(dil, 0)
+
+    def en_iyi_guncelle(self, dil, skor):
+        best = self.ayar.setdefault('best', {})
+        if skor > best.get(dil, 0):
+            best[dil] = skor
+            settings_store.kaydet(self.user_data_dir, self.ayar)
+
     # ── Bağlantı yönetimi ────────────────────────────────────────────────────
     def baglan_ve_gec(self, oda_kodu, ad):
         self._offline_temizle()
         self.sm.get_screen('oyun').sohbet_goster(True)
+        self.sm.get_screen('oyun').training_mode(False)   # online: rakip görünür
         self._oda_kodu = oda_kodu
         self.net.baglan(oda_kodu, ad)
         self.sm.get_screen('lobi').kodu_ayarla(oda_kodu)

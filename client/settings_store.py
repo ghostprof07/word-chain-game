@@ -8,6 +8,7 @@ import os
 VARSAYILAN = {
     'app_lang': 'en',   # arayüz dili
     'dict_lang': 'en',  # oyun sözlüğü (kelime doğrulama) dili
+    'best': {},         # antrenman en iyi skorları: {dict_lang: skor}
 }
 
 
@@ -15,16 +16,21 @@ def _dosya(dizin):
     return os.path.join(dizin, 'wordchain_settings.json')
 
 
+def _varsayilan():
+    # dict değerleri (best) için taze kopya — paylaşılan mutable default olmasın
+    return {k: (dict(v) if isinstance(v, dict) else v) for k, v in VARSAYILAN.items()}
+
+
 def yukle(dizin):
     """Ayarları okur; yoksa varsayılanı döndürür."""
     try:
         with open(_dosya(dizin), encoding='utf-8') as f:
             veri = json.load(f)
-        ayar = dict(VARSAYILAN)
+        ayar = _varsayilan()
         ayar.update({k: veri[k] for k in VARSAYILAN if k in veri})
         return ayar
     except Exception:
-        return dict(VARSAYILAN)
+        return _varsayilan()
 
 
 def kaydet(dizin, ayar):
