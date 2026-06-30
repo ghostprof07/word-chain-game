@@ -31,6 +31,7 @@ if platform not in ('android', 'ios'):
     if os.environ.get('WC_TOP'):
         Config.set('graphics', 'top', os.environ['WC_TOP'])
 
+from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -96,6 +97,13 @@ def etiket(metin, boyut=15, renk=(1, 1, 1, 1), kalin=False, hizala='center', **k
                 bold=kalin, halign=hizala, valign='middle', **kw)
     lbl.bind(size=lambda *a: setattr(lbl, 'text_size', lbl.size))
     return lbl
+
+
+def pop_anim(widget, base_dp):
+    """Etiketin font'unu kısaca küçültüp out_back ile büyüterek 'pop' efekti."""
+    Animation.cancel_all(widget, 'font_size')
+    widget.font_size = base_dp * 0.5
+    Animation(font_size=base_dp, d=0.22, t='out_back').start(widget)
 
 
 def buton(metin, renk_bg=YESIL, renk_yazi=(0, 0, 0, 1), boyut=17, callback=None):
@@ -617,7 +625,10 @@ class OyunEkrani(Screen):
         self.toplam_lbl.text = f'{m:02d}:{s:02d}'
         self.kelime_lbl.text = t('words_count', n=d['kelime_sayisi'])
 
-        self.harf_lbl.text = d['gerekli_harf'].upper()
+        yeni_harf = d['gerekli_harf'].upper()
+        if yeni_harf != self.harf_lbl.text:   # harf değişti -> pop
+            self.harf_lbl.text = yeni_harf
+            pop_anim(self.harf_lbl, dp(72))
 
         tt = int(d['hamle_sure'])
         self.hamle_lbl.text = str(tt)
@@ -635,8 +646,11 @@ class OyunEkrani(Screen):
         oyuncular = d.get('oyuncular', {})
         self.p1_ad.text = oyuncular.get('1', f"{t('player')} 1")
         self.p2_ad.text = oyuncular.get('2', f"{t('player')} 2")
-        self.p1_puan.text = str(d['puan']['1'])
-        self.p2_puan.text = str(d['puan']['2'])
+        for lbl, yeni in ((self.p1_puan, str(d['puan']['1'])),
+                          (self.p2_puan, str(d['puan']['2']))):
+            if yeni != lbl.text:        # puan değişti -> pop
+                lbl.text = yeni
+                pop_anim(lbl, dp(34))
 
         sira = d['siradaki_no']
         benim_sira = (sira == self._benim_no)
@@ -723,7 +737,10 @@ class SonucEkrani(Screen):
 
         self._kok.add_widget(Label(size_hint_y=None, height=dp(16)))
         self._kok.add_widget(etiket(t('game_over'), boyut=13, renk=(0.5, 0.5, 0.5, 1)))
-        self._kok.add_widget(etiket(yazi, boyut=32, kalin=True, renk=renk))
+        baslik_lbl = etiket(yazi, boyut=32, kalin=True, renk=renk)
+        self._kok.add_widget(baslik_lbl)
+        baslik_lbl.font_size = dp(12)        # büyüyerek gelsin
+        Animation(font_size=dp(32), d=0.32, t='out_back').start(baslik_lbl)
         if ayrilan:
             self._kok.add_widget(etiket(t('left_game', name=ayrilan), boyut=13,
                                         renk=(0.6, 0.6, 0.6, 1)))
@@ -795,8 +812,11 @@ class SonucEkrani(Screen):
                                     size_hint_y=None, height=dp(20)))
         self._kok.add_widget(etiket(t('training'), boyut=22, kalin=True, renk=PEMBE,
                                     size_hint_y=None, height=dp(34)))
-        self._kok.add_widget(etiket(str(skor), boyut=64, kalin=True, renk=YESIL,
-                                    size_hint_y=None, height=dp(92)))
+        skor_lbl = etiket(str(skor), boyut=64, kalin=True, renk=YESIL,
+                          size_hint_y=None, height=dp(92))
+        self._kok.add_widget(skor_lbl)
+        skor_lbl.font_size = dp(20)
+        Animation(font_size=dp(64), d=0.35, t='out_back').start(skor_lbl)
         self._kok.add_widget(etiket(t('pts'), boyut=13, renk=(0.5, 0.5, 0.5, 1),
                                     size_hint_y=None, height=dp(20)))
         self._kok.add_widget(etiket(t('best_score', n=eniyi), boyut=16, kalin=True,
