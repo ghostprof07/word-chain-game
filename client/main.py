@@ -309,6 +309,13 @@ class BaglanEkrani(Screen):
         kok.add_widget(self.kod_giris)
         kok.add_widget(buton(t('join_with_code'), renk_bg=MAVI, callback=self.katil))
 
+        kok.add_widget(Label(size_hint_y=None, height=dp(2)))
+        solo_btn = buton(t('solo_play'), renk_bg=MOR,
+                         callback=lambda *_: self._solo_popup())
+        solo_btn.size_hint_y = None
+        solo_btn.height = dp(50)
+        kok.add_widget(solo_btn)
+
         self.durum = etiket('', boyut=13, renk=SARI)
         self.durum.size_hint_y = None
         self.durum.height = dp(28)
@@ -323,6 +330,27 @@ class BaglanEkrani(Screen):
 
     def _ad(self):
         return self.ad_giris.text.strip() or t('player')
+
+    def _solo_popup(self):
+        """Tek kişilik (offline) oyun seçimi: Bota karşı + zorluk."""
+        icerik = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(16))
+        icerik.add_widget(etiket(t('vs_bot'), boyut=17, kalin=True, renk=PEMBE,
+                                 size_hint_y=None, height=dp(30)))
+        icerik.add_widget(etiket(t('difficulty'), boyut=12, renk=(0.6, 0.6, 0.6, 1),
+                                 size_hint_y=None, height=dp(20)))
+        pop = Popup(title=t('solo_title'), content=icerik, size_hint=(0.9, None),
+                    height=dp(340), title_color=(1, 1, 1, 1), separator_color=MOR)
+        for kod, etik, renk in (('kolay', t('easy'), YESIL),
+                                ('orta', t('medium'), SARI),
+                                ('zor', t('hard'), KIRMIZI)):
+            b = buton(etik, renk_bg=renk, renk_yazi=(0, 0, 0, 1))
+            b.size_hint_y = None
+            b.height = dp(52)
+            b.bind(on_press=lambda _b, z=kod: (
+                pop.dismiss(), App.get_running_app().bota_karsi_basla(z)))
+            icerik.add_widget(b)
+        icerik.add_widget(Label())
+        pop.open()
 
     def _sure_sec(self, saniye):
         self._secili_sure = saniye
@@ -547,11 +575,16 @@ class OyunEkrani(Screen):
     def benim_no_ayarla(self, no):
         self._benim_no = no
 
+    def sohbet_goster(self, goster):
+        """Sohbet butonunu göster/gizle (offline modda rakip olmadığı için gizli)."""
+        self.sohbet_btn.opacity = 1 if goster else 0
+        self.sohbet_btn.disabled = not goster
+
     def _gonder(self):
         kelime = self.giris.text.strip().lower()
         self.giris.text = ''
         if kelime:
-            App.get_running_app().net.kelime_gonder(kelime)
+            App.get_running_app().kelime_gonder(kelime)
 
     def kelime_sonuc(self, basari, kod, harf, puan):
         if kod == 'points':
@@ -733,7 +766,11 @@ class SonucEkrani(Screen):
         self._kok.add_widget(Label(size_hint_y=None, height=dp(12)))
 
     def _rematch_iste(self):
-        App.get_running_app().net.rematch_iste()
+        app = App.get_running_app()
+        if app.offline:
+            app.rematch_iste()          # offline: anında yeni oyun
+            return
+        app.net.rematch_iste()
         self._rematch_durum.text = t('waiting_opponent')
         if self._rematch_btn:
             self._rematch_btn.disabled = True
@@ -831,6 +868,90 @@ class AyarlarEkrani(Screen):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  OFFLINE MOTOR — Bota karşı (sunucu yerine yerel oyun + bot + zamanlayıcı)
+# ══════════════════════════════════════════════════════════════════════════════
+class OfflineMotor:
+    """
+    Yerel GameRoom + bot + zamanlayıcıyı çalıştırır; sunucuyla AYNI mesaj
+    sözlüklerini app._mesaj_geldi'ye besler — böylece tüm oyun/sonuç ekranı
+    kodu aynen yeniden kullanılır. İnternet/sunucu gerektirmez.
+    """
+    def __init__(self, app, oda, bot, zorluk):
+        self.app = app
+        self.oda = oda
+        self.bot = bot
+        self.zorluk = zorluk
+        self._timer = None
+        self._bot_ev = None
+
+    def basla(self):
+        self.oda._oyunu_baslat()
+        self.app._benim_no = 1
+        self.app.sm.get_screen('oyun').benim_no_ayarla(1)
+        self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'yeni_oyun'})
+        self._timer = Clock.schedule_interval(self._tik, 1)
+
+    def gonder(self, kelime):
+        """İnsanın (oyuncu 1) kelime denemesi."""
+        if self.oda.bitti:
+            return
+        basari, kod, puan = self.oda.kelime_oyna('human', kelime)
+        self.app._mesaj_geldi({'tip': 'kelime_sonuc', 'basari': basari,
+                               'kod': kod, 'puan': puan,
+                               'harf': self.oda.gerekli_harf})
+        if basari:
+            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'durum'})
+            if not self.oda.bitti and self.oda.siradaki_no == 2:
+                self._bot_planla()
+
+    def _bot_planla(self):
+        self._bot_iptal()
+        self._bot_ev = Clock.schedule_once(lambda dt: self._bot_oyna(),
+                                           self.bot.gecikme())
+
+    def _bot_oyna(self):
+        self._bot_ev = None
+        if self.oda.bitti or self.oda.siradaki_no != 2:
+            return
+        kelime = self.bot.kelime_sec()
+        if not kelime:
+            return   # bulamadı (çok nadir) -> süresi dolar
+        basari, _kod, _puan = self.oda.kelime_oyna('bot', kelime)
+        if basari:
+            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'durum'})
+
+    def _tik(self, dt):
+        if self.oda.bitti:
+            self.dur()
+            return
+        self.oda.sure_guncelle()
+        if self.oda.bitti:
+            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'oyun_bitti'})
+            self.dur()
+        else:
+            self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'durum'})
+
+    def tekrar(self):
+        """Tekrar oyna (offline) — yeni oyunu hemen başlatır."""
+        self.dur()
+        self.oda._yeni_oyun_durumu()
+        self.oda._oyunu_baslat()
+        self.app._mesaj_geldi({**self.oda.durum(), 'tip': 'yeni_oyun'})
+        self._timer = Clock.schedule_interval(self._tik, 1)
+
+    def _bot_iptal(self):
+        if self._bot_ev:
+            self._bot_ev.cancel()
+            self._bot_ev = None
+
+    def dur(self):
+        if self._timer:
+            self._timer.cancel()
+            self._timer = None
+        self._bot_iptal()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  APP
 # ══════════════════════════════════════════════════════════════════════════════
 class WordChainOnlineApp(App):
@@ -851,6 +972,7 @@ class WordChainOnlineApp(App):
         self._sohbet_popup = None
         self._sohbet_kutu = None
         self._okunmamis = 0
+        self.offline = None   # offline (bota karşı/antrenman) motoru; yoksa online
 
         self.sm = ScreenManager(transition=FadeTransition(duration=0.2))
         self._ekranlari_kur()
@@ -881,15 +1003,52 @@ class WordChainOnlineApp(App):
         self.ayar['dict_lang'] = kod
         settings_store.kaydet(self.user_data_dir, self.ayar)
 
+    # ── Kelime gönderme (online ya da offline'a yönlendirir) ──────────────────
+    def kelime_gonder(self, kelime):
+        if self.offline:
+            self.offline.gonder(kelime)
+        else:
+            self.net.kelime_gonder(kelime)
+
+    def rematch_iste(self):
+        if self.offline:
+            self.offline.tekrar()
+        else:
+            self.net.rematch_iste()
+
+    # ── Offline: Bota karşı ──────────────────────────────────────────────────
+    def bota_karsi_basla(self, zorluk):
+        from game_logic import GameRoom   # lazy: sözlük ilk burada yüklenir
+        from bot import Bot
+        baglan = self.sm.get_screen('baglan')
+        ad = baglan._ad() or t('player')
+        oda = GameRoom('LOCAL', toplam_sure=baglan._secili_sure, hamle_sure=20,
+                       dict_lang=self.ayar['dict_lang'])
+        oda.oyuncu_ekle('human', ad)
+        oda.oyuncu_ekle('bot', t('bot'))
+        self.offline = OfflineMotor(self, oda, Bot(oda, zorluk), zorluk)
+        self.sm.get_screen('oyun').sohbet_goster(False)   # offline: sohbet yok
+        self.offline.basla()
+
     # ── Bağlantı yönetimi ────────────────────────────────────────────────────
     def baglan_ve_gec(self, oda_kodu, ad):
+        self._offline_temizle()
+        self.sm.get_screen('oyun').sohbet_goster(True)
         self._oda_kodu = oda_kodu
         self.net.baglan(oda_kodu, ad)
         self.sm.get_screen('lobi').kodu_ayarla(oda_kodu)
         self.sm.current = 'lobi'
 
+    def _offline_temizle(self):
+        if self.offline:
+            self.offline.dur()
+            self.offline = None
+
     def odadan_cik(self):
-        self.net.kapat()
+        if self.offline:
+            self._offline_temizle()
+        else:
+            self.net.kapat()
         self.ana_menuye()
 
     def ana_menuye(self):

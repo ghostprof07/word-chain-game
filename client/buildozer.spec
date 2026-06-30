@@ -7,7 +7,7 @@ package.domain = com.kemalyavuz
 
 # Kaynak klasörü (main.py burada)
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ttf
+source.include_exts = py,png,jpg,kv,atlas,ttf,txt
 
 # Uygulama ikonu (client/icon.png — gradyan + coil motifi)
 icon.filename = %(source.dir)s/icon.png
