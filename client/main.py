@@ -37,6 +37,7 @@ from kivy.core.window import Window
 
 Window.softinput_mode = 'below_target'
 from kivy.graphics import Color, RoundedRectangle, Line, Ellipse
+from kivy.graphics.texture import Texture
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -51,15 +52,20 @@ from config import SUNUCU_HTTP, SUNUCU_WS
 import settings_store
 from i18n import t, dil_ayarla, DILLER
 
-Window.clearcolor = (0.05, 0.05, 0.05, 1)
+Window.clearcolor = (0.06, 0.05, 0.10, 1)
 
-# ── Colors ────────────────────────────────────────────────────────────────────
-KOYU    = (0.07, 0.07, 0.07, 1)
-YESIL   = (0, 0.78, 0.32, 1)
-MAVI    = (0, 0.85, 1, 1)
-SARI    = (1, 0.84, 0, 1)
-KIRMIZI = (1, 0.3, 0.3, 1)
-GENC    = (0.15, 0.15, 0.15, 1)
+# ── Colors (canlı gradyan tema) ───────────────────────────────────────────────
+KOYU    = (0.09, 0.07, 0.14, 1)   # koyu mor-siyah (kart arkası)
+GENC    = (0.17, 0.14, 0.24, 1)   # koyu mor (kart / giriş kutusu)
+YESIL   = (0.20, 0.92, 0.55, 1)   # canlı yeşil (kazanma / sıra / oyuncu 1)
+MAVI    = (0.28, 0.80, 1.0, 1)    # canlı camgöbeği (oyuncu 2)
+SARI    = (1.0, 0.80, 0.30, 1)    # altın (süre / vurgu)
+KIRMIZI = (1.0, 0.38, 0.45, 1)    # mercan (kaybetme)
+# Marka renkleri — gradyan: mor → pembe → turuncu
+MOR     = (0.49, 0.23, 0.93, 1)
+PEMBE   = (1.0, 0.27, 0.59, 1)
+TURUNCU = (1.0, 0.59, 0.20, 1)
+GRADYAN = [MOR, PEMBE, TURUNCU]
 
 # Sözlük (kelime doğrulama) dilleri — sunucudaki ALFABELER/words_<kod>.txt ile
 # aynı tutulmalı. YENİ SÖZLÜK: buraya kod+ad ekle + sunucuya words_<kod>.txt +
@@ -125,10 +131,72 @@ def secim_vurgu(btn, secili, renk_secili=YESIL):
 def giris_kutusu(hint, **kw):
     kw.setdefault('font_size', dp(22))
     ti = TextInput(multiline=False,
-                   hint_text=hint, hint_text_color=(0.3, 0.3, 0.3, 1),
+                   hint_text=hint, hint_text_color=(0.45, 0.4, 0.55, 1),
                    background_color=GENC, foreground_color=(1, 1, 1, 1),
-                   cursor_color=YESIL, padding=[dp(14), dp(12)], **kw)
+                   cursor_color=PEMBE, padding=[dp(14), dp(12)], **kw)
     return ti
+
+
+# ── Gradyan (canlı tema) ───────────────────────────────────────────────────────
+def _renk_ara(renkler, t):
+    """0..1 arası t için renk listesinde doğrusal interpolasyon (r,g,b)."""
+    t = max(0.0, min(1.0, t))
+    seg = t * (len(renkler) - 1)
+    i = min(int(seg), len(renkler) - 2)
+    f = seg - i
+    c0, c1 = renkler[i], renkler[i + 1]
+    return tuple(c0[j] + (c1[j] - c0[j]) * f for j in range(3))
+
+
+def _hex3(c):
+    return ''.join(f'{int(max(0, min(1, x)) * 255):02x}' for x in c[:3])
+
+
+def gradyan_doku(renkler, n=64):
+    """Soldan sağa renk geçişli yatay gradyan texture."""
+    buf = bytearray()
+    for x in range(n):
+        r, g, b = _renk_ara(renkler, x / (n - 1))
+        buf += bytes((int(r * 255), int(g * 255), int(b * 255), 255))
+    tex = Texture.create(size=(n, 1), colorfmt='rgba')
+    tex.blit_buffer(bytes(buf), colorfmt='rgba', bufferfmt='ubyte')
+    tex.wrap = 'clamp_to_edge'
+    return tex
+
+
+def gradyan_buton(metin, renkler=None, boyut=17, renk_yazi=(1, 1, 1, 1),
+                  callback=None, radius=14):
+    """Gradyan dolgulu birincil buton."""
+    renkler = renkler or GRADYAN
+    btn = Button(text=metin, font_size=dp(boyut), bold=True, color=renk_yazi,
+                 background_normal='', background_color=(0, 0, 0, 0))
+    tex = gradyan_doku(renkler)
+    with btn.canvas.before:
+        Color(1, 1, 1, 1)
+        rect = RoundedRectangle(texture=tex, pos=btn.pos, size=btn.size,
+                                radius=[dp(radius)])
+    btn.bind(pos=lambda *a: setattr(rect, 'pos', btn.pos),
+             size=lambda *a: setattr(rect, 'size', btn.size))
+    if callback:
+        btn.bind(on_press=callback)
+    return btn
+
+
+def gradyan_baslik(metin, renkler=None, boyut=40, **kw):
+    """Her harfi gradyan boyunca renklenen başlık etiketi (markup)."""
+    renkler = renkler or GRADYAN
+    gorunur = [i for i, c in enumerate(metin) if not c.isspace()]
+    parcalar = []
+    for i, c in enumerate(metin):
+        if c.isspace():
+            parcalar.append(c)
+            continue
+        t = gorunur.index(i) / max(1, len(gorunur) - 1)
+        parcalar.append(f'[color=#{_hex3(_renk_ara(renkler, t))}]{c}[/color]')
+    lbl = Label(text=''.join(parcalar), markup=True, font_size=dp(boyut),
+                bold=True, halign='center', valign='middle', **kw)
+    lbl.bind(size=lambda *a: setattr(lbl, 'text_size', lbl.size))
+    return lbl
 
 
 # ── İkonlar (canvas ile çizilir; emoji fontuna ihtiyaç yok, her cihazda çalışır) ─
@@ -205,12 +273,12 @@ class BaglanEkrani(Screen):
         ust.add_widget(ayar_btn)
         kok.add_widget(ust)
 
-        baslik = etiket('WORD\nCHAIN', boyut=46, kalin=True, renk=YESIL)
+        baslik = gradyan_baslik('LEXICOIL', boyut=40)
         baslik.size_hint_y = None
-        baslik.height = dp(110)
+        baslik.height = dp(96)
         kok.add_widget(baslik)
         kok.add_widget(etiket(t('subtitle'), boyut=14,
-                              renk=(0.6, 0.6, 0.6, 1), hizala='center'))
+                              renk=(0.62, 0.55, 0.72, 1), hizala='center'))
 
         kok.add_widget(Label(size_hint_y=None, height=dp(6)))
 
@@ -230,8 +298,11 @@ class BaglanEkrani(Screen):
         kok.add_widget(sure_satir)
         self._sure_sec(300)
 
-        kok.add_widget(buton(t('create_room'), callback=self.oda_olustur))
-        kok.add_widget(etiket(t('or'), boyut=12, renk=(0.4, 0.4, 0.4, 1)))
+        cr_btn = gradyan_buton(t('create_room'), callback=self.oda_olustur)
+        cr_btn.size_hint_y = None
+        cr_btn.height = dp(54)
+        kok.add_widget(cr_btn)
+        kok.add_widget(etiket(t('or'), boyut=12, renk=(0.45, 0.4, 0.55, 1)))
 
         self.kod_giris = giris_kutusu(t('room_code_hint'),
                                       size_hint_y=None, height=dp(52))
@@ -438,7 +509,7 @@ class OyunEkrani(Screen):
         self.tur_lbl.height = dp(24)
         kok.add_widget(self.tur_lbl)
 
-        self.harf_lbl = etiket('?', boyut=72, kalin=True, renk=YESIL)
+        self.harf_lbl = etiket('?', boyut=72, kalin=True, renk=PEMBE)
         self.harf_lbl.size_hint_y = None
         self.harf_lbl.height = dp(110)
         kok.add_widget(self.harf_lbl)
@@ -648,8 +719,8 @@ class SonucEkrani(Screen):
         self._kok.add_widget(Label())
 
         if not ayrilan:
-            self._rematch_btn = buton(t('play_again'),
-                                      callback=lambda *_: self._rematch_iste())
+            self._rematch_btn = gradyan_buton(t('play_again'),
+                                              callback=lambda *_: self._rematch_iste())
             self._rematch_btn.size_hint_y = None
             self._rematch_btn.height = dp(54)
             self._kok.add_widget(self._rematch_btn)
@@ -763,6 +834,8 @@ class AyarlarEkrani(Screen):
 #  APP
 # ══════════════════════════════════════════════════════════════════════════════
 class WordChainOnlineApp(App):
+    title = 'Lexicoil'
+
     def build(self):
         # Ayarları yükle ve uygulama dilini uygula
         self.ayar = settings_store.yukle(self.user_data_dir)

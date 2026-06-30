@@ -1,13 +1,16 @@
 [app]
 
 # Uygulama bilgileri
-title = Word Chain
-package.name = wordchain
+title = Lexicoil
+package.name = lexicoil
 package.domain = com.kemalyavuz
 
 # Kaynak klasörü (main.py burada)
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
+
+# Uygulama ikonu (client/icon.png — gradyan + coil motifi)
+icon.filename = %(source.dir)s/icon.png
 
 # Sürüm
 version = 1.0
@@ -21,8 +24,8 @@ requirements = python3,kivy==2.3.1,websocket-client,requests,certifi,openssl
 orientation = portrait
 fullscreen = 0
 
-# Açılış ekranı rengi (koyu)
-android.presplash_color = #0D0D0D
+# Açılış ekranı rengi (koyu mor — tema ile uyumlu)
+android.presplash_color = #0F0D1A
 
 # ── İZİNLER ───────────────────────────────────────────────────────────────────
 # INTERNET: online oyun için zorunlu
