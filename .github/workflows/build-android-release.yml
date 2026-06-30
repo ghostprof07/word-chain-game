@@ -1,18 +1,16 @@
-name: Android APK Derle
+name: Android Release AAB (Google Play)
 
-# Ne zaman çalışsın: istemci (APK'yı etkileyen) dosyalar değişince ya da elle.
-# paths sayesinde sadece sunucu/workflow değişikliklerinde gereksiz APK
-# derlemesi yapılmaz. Workflow'un kendisini değiştirince elle (workflow_dispatch)
-# ya da Actions sekmesinden "Run workflow" ile test edilebilir.
+# Sadece ELLE tetiklenir (Actions sekmesi -> Run workflow). Google Play'e
+# yüklenecek İMZALI .aab üretir. İmzalama bilgileri GitHub Secrets'tan gelir:
+#   KEYSTORE_BASE64    -> keystore dosyasinin base64 hali
+#   KEYSTORE_PASSWORD  -> keystore (store) parolasi
+#   KEY_ALIAS          -> anahtar alias adi
+#   KEY_PASSWORD       -> anahtar (alias) parolasi
 on:
-  push:
-    branches: [ main, master ]
-    paths:
-      - 'client/**'
   workflow_dispatch:
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-22.04
     steps:
       - name: Kodu çek
@@ -23,8 +21,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Java 17 — yeni cmdline-tools (sdkmanager) Java 17 ZORUNLU kılıyor.
-      # setup-java JAVA_HOME'u 17'ye ayarlar, hem sdkmanager hem buildozer kullanır.
       - name: Java 17 kur
         uses: actions/setup-java@v4
         with:
@@ -39,9 +35,6 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
             cmake libffi-dev libssl-dev build-essential ccache wget
 
-      # ── B PLANI: Android SDK'yi buildozer'in TAM beklediği yere elle kur ──
-      # build-tools + platform + lisanslar önceden hazır olunca
-      # "Aidl not found / build-tools folder not found" hatası oluşmaz.
       - name: Android SDK + build-tools kur
         run: |
           set -e
@@ -55,26 +48,31 @@ jobs:
           yes | $SDKMGR --sdk_root=$SDK --licenses >/dev/null 2>&1 || true
           $SDKMGR --sdk_root=$SDK "platform-tools" "build-tools;35.0.0" "platforms;android-35" "cmdline-tools;latest"
           yes | $SDKMGR --sdk_root=$SDK --licenses >/dev/null 2>&1 || true
-          # Buildozer sdkmanager'i ESKI konumda (tools/bin) ariyor — symlink ile karsila
           mkdir -p $SDK/tools/bin
           ln -sf $SDK/cmdline-tools/latest/bin/sdkmanager $SDK/tools/bin/sdkmanager
           ln -sf $SDK/cmdline-tools/latest/bin/avdmanager $SDK/tools/bin/avdmanager
-          echo "--- Kurulan build-tools ---"
-          ls $SDK/build-tools
-          echo "--- tools/bin/sdkmanager symlink ---"
-          ls -l $SDK/tools/bin/sdkmanager
 
       - name: Buildozer kur
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade buildozer cython==0.29.36
 
-      - name: APK derle
-        working-directory: client
-        run: buildozer -v android debug
+      - name: Keystore'u hazırla (secret'tan)
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$HOME/release.keystore"
+          test -s "$HOME/release.keystore" || (echo "KEYSTORE_BASE64 secret bos!"; exit 1)
 
-      - name: APK'yı yükle (indirilebilir çıktı)
+      - name: İmzalı AAB derle
+        working-directory: client
+        env:
+          P4A_RELEASE_KEYSTORE: /home/runner/release.keystore
+          P4A_RELEASE_KEYSTORE_PASSWD: ${{ secrets.KEYSTORE_PASSWORD }}
+          P4A_RELEASE_KEYALIAS: ${{ secrets.KEY_ALIAS }}
+          P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.KEY_PASSWORD }}
+        run: buildozer -v android release
+
+      - name: AAB'yi yükle (indirilebilir çıktı)
         uses: actions/upload-artifact@v4
         with:
-          name: wordchain-apk
-          path: client/bin/*.apk
+          name: lexicoil-aab
+          path: client/bin/*.aab

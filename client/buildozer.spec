@@ -12,8 +12,11 @@ source.include_exts = py,png,jpg,kv,atlas,ttf,txt
 # Uygulama ikonu (client/icon.png — gradyan + coil motifi)
 icon.filename = %(source.dir)s/icon.png
 
-# Sürüm
+# Sürüm — Play'e her yüklemede artır (versionCode buradan üretilir)
 version = 1.0
+
+# Release çıktısı AAB (Google Play yeni uygulamalar için AAB ister, APK değil).
+android.release_artifact = aab
 
 # ── BAĞIMLILIKLAR ─────────────────────────────────────────────────────────────
 # kivy: arayüz | websocket-client: online bağlantı | requests: oda oluşturma
@@ -36,7 +39,9 @@ android.presplash_color = #FF4B96
 android.permissions = INTERNET,ACCESS_NETWORK_STATE
 
 # ── ANDROID API SEVİYELERİ ────────────────────────────────────────────────────
-android.api = 34
+# Play (Haz 2026): yeni uygulamalar API 35 hedeflemeli. 31 Ağu 2026'dan sonra
+# API 36 zorunlu olacak — o tarihten önce 36'ya yükselt.
+android.api = 35
 android.minapi = 24
 # SDK lisansını otomatik kabul et (CI'da build-tools kurulumu için ŞART)
 android.accept_sdk_license = True
