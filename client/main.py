@@ -898,12 +898,15 @@ class AyarlarEkrani(Screen):
         self._kok.add_widget(etiket(t('settings_title'), boyut=24, kalin=True,
                                     renk=YESIL, size_hint_y=None, height=dp(36)))
 
-        # ── İstatistikler butonu ──
-        ist_btn = buton(t('statistics'), renk_bg=MOR, boyut=15,
+        # ── İstatistikler + Ses (yan yana) ──
+        ust_satir = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        ist_btn = buton(t('statistics'), renk_bg=MOR, boyut=14,
                         callback=lambda *_: self._istatistik_popup())
-        ist_btn.size_hint_y = None
-        ist_btn.height = dp(46)
-        self._kok.add_widget(ist_btn)
+        ust_satir.add_widget(ist_btn)
+        self._ses_btn = secim_butonu(t('sound'), lambda _b: self._ses_toggle(), boyut=14)
+        secim_vurgu(self._ses_btn, app.ayar.get('sound', True))
+        ust_satir.add_widget(self._ses_btn)
+        self._kok.add_widget(ust_satir)
         self._kok.add_widget(Label(size_hint_y=None, height=dp(8)))
 
         # ── BÖLÜM 1: Uygulama Dili ──
@@ -949,6 +952,16 @@ class AyarlarEkrani(Screen):
         for k, b in self._sozluk_butonlar.items():
             secim_vurgu(b, k == kod, renk_secili=MAVI)
 
+    def _ses_toggle(self):
+        app = App.get_running_app()
+        yeni = not app.ayar.get('sound', True)
+        app.ayar['sound'] = yeni
+        app.sesler.acik = yeni
+        settings_store.kaydet(app.user_data_dir, app.ayar)
+        secim_vurgu(self._ses_btn, yeni)
+        if yeni:
+            app.sesler.cal('success')   # açınca örnek ses
+
     def _istatistik_popup(self):
         app = App.get_running_app()
         st = app.istatistik()
@@ -980,6 +993,36 @@ class AyarlarEkrani(Screen):
         rb.bind(on_press=_sifirla)
         icerik.add_widget(rb)
         pop.open()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  SES — efektleri yükler ve çalar (sustur ayarına saygı duyar)
+# ══════════════════════════════════════════════════════════════════════════════
+class Sesler:
+    def __init__(self):
+        self._sesler = {}
+        self.acik = True
+        try:
+            from kivy.core.audio import SoundLoader
+            d = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sounds')
+            for ad in ('success', 'error', 'win', 'lose'):
+                s = SoundLoader.load(os.path.join(d, ad + '.wav'))
+                if s:
+                    self._sesler[ad] = s
+        except Exception:
+            pass
+
+    def cal(self, ad):
+        if not self.acik:
+            return
+        s = self._sesler.get(ad)
+        if not s:
+            return
+        try:
+            s.stop()
+            s.play()
+        except Exception:
+            pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1104,6 +1147,8 @@ class WordChainOnlineApp(App):
         self._okunmamis = 0
         self.offline = None   # offline (bota karşı/antrenman) motoru; yoksa online
         self._oyun_kayitli = False   # bu oyun istatistiğe kaydedildi mi (tek sefer)
+        self.sesler = Sesler()
+        self.sesler.acik = self.ayar.get('sound', True)
 
         self.sm = ScreenManager(transition=FadeTransition(duration=0.2))
         self._ekranlari_kur()
@@ -1204,11 +1249,23 @@ class WordChainOnlineApp(App):
     def istatistik(self):
         return self.ayar.setdefault('stats', {})
 
+    def _oyun_bitti_ses(self, d):
+        """Oyun sonucu sesini çalar (kazandın -> win, kaybettin -> lose)."""
+        if d.get('mod') == 'training' or d.get('ayrilan_ad'):
+            self.sesler.cal('win')
+            return
+        kz = d.get('kazanan')
+        if kz == self._benim_no:
+            self.sesler.cal('win')
+        elif kz not in (0, None):
+            self.sesler.cal('lose')
+
     def _istatistik_kaydet(self, d):
         """Oyun bitince (bir kez) istatistiği günceller — son durumdan hesaplanır."""
         if self._oyun_kayitli:
             return
         self._oyun_kayitli = True
+        self._oyun_bitti_ses(d)
         st = self.istatistik()
         zincir = d.get('zincir', [])
         benim = [z for z in zincir if z.get('no') == self._benim_no]
@@ -1280,6 +1337,7 @@ class WordChainOnlineApp(App):
             self._sohbet_geldi(veri)
 
         elif tip == 'kelime_sonuc':
+            self.sesler.cal('success' if veri['basari'] else 'error')
             self.sm.get_screen('oyun').kelime_sonuc(
                 veri['basari'], veri.get('kod', 'invalid'),
                 veri.get('harf'), veri.get('puan', 0))

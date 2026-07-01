@@ -10,6 +10,7 @@ VARSAYILAN = {
     'dict_lang': 'en',  # oyun sözlüğü (kelime doğrulama) dili
     'best': {},         # antrenman en iyi skorları: {dict_lang: skor}
     'stats': {},        # istatistikler: games/wins/losses/draws/words/best_word
+    'sound': True,      # ses efektleri açık mı
 }
 
 
