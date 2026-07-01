@@ -117,8 +117,42 @@ def sozluk_getir(dil):
     return s
 
 
-def kelime_puani(kelime):
-    return sum(PUAN.get(h, 0) for h in kelime.lower())
+def _puan_tablosu_hesapla(dil):
+    """en dışındaki diller için harf puan tablosunu o dilin sözlüğündeki harf
+    sıklığından türetir (sık harf=düşük puan, nadir harf=yüksek puan) —
+    böylece Latin dışı/aksanlı alfabelerde de (ör. Rusça) puan hep sıfır kalmaz."""
+    sayac = {}
+    for kelime in sozluk_getir(dil):
+        for h in kelime:
+            sayac[h] = sayac.get(h, 0) + 1
+    if not sayac:
+        return {}
+    toplam = sum(sayac.values())
+    esikler = [(0.40, 1), (0.60, 2), (0.75, 3), (0.85, 4), (0.93, 5), (0.98, 8)]
+    tablo = {}
+    kumulatif = 0
+    for h in sorted(sayac, key=lambda x: -sayac[x]):
+        oran = kumulatif / toplam
+        kumulatif += sayac[h]
+        tablo[h] = next((puan for esik, puan in esikler if oran < esik), 10)
+    return tablo
+
+
+_PUAN_TABLOLARI = {}
+
+
+def _puan_tablosu(dil):
+    if dil not in _PUAN_TABLOLARI:
+        _PUAN_TABLOLARI[dil] = _puan_tablosu_hesapla(dil)
+    return _PUAN_TABLOLARI[dil]
+
+
+def kelime_puani(kelime, dil='en'):
+    kelime = kelime.lower()
+    if dil == 'en':
+        return sum(PUAN.get(h, 1) for h in kelime)
+    tablo = _puan_tablosu(dil)
+    return sum(tablo.get(h, 1) for h in kelime)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -274,7 +308,7 @@ class GameRoom:
             return False, 'not_valid', 0
 
         # ── Success ──
-        puan = kelime_puani(kelime)
+        puan = kelime_puani(kelime, self.dict_lang)
         self.puan[oyuncu['no']] += puan
         self.kullanilan.add(kelime)
         self.zincir.append({'kelime': kelime, 'no': oyuncu['no'], 'puan': puan})

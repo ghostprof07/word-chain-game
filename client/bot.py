@@ -36,7 +36,7 @@ class Bot:
         if not adaylar:
             return None
         if self.zorluk == 'zor':
-            adaylar.sort(key=lambda w: kelime_puani(w) + len(w), reverse=True)
+            adaylar.sort(key=lambda w: kelime_puani(w, self.oda.dict_lang) + len(w), reverse=True)
             return random.choice(adaylar[:25])
         if self.zorluk == 'kolay':
             kisa = sorted(adaylar, key=len)[:200]

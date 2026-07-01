@@ -271,7 +271,9 @@ class BaglanEkrani(Screen):
         kok = BoxLayout(orientation='vertical', padding=dp(24), spacing=dp(14))
         kart(kok, renk=KOYU)
 
-        # Üst satır: başlık + ayarlar butonu
+        # Üst satır: başlık + ayarlar butonu (telefonda üst köşeye çok
+        # yakın olmasın diye ayrıca aşağı kaydırıldı — başparmakla ulaşmak zor)
+        kok.add_widget(Label(size_hint_y=None, height=dp(22)))
         ust = BoxLayout(size_hint_y=None, height=dp(34))
         ust.add_widget(Label())  # esnek boşluk
         ayar_btn = ikon_buton(ciz_ayar_ikonu, renk_bg=GENC,
