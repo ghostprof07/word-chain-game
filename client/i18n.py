@@ -45,6 +45,28 @@ CEVIRILER = {
         'games': 'Games', 'wins': 'Wins', 'losses': 'Losses', 'draws': 'Draws',
         'win_rate': 'Win rate', 'words_played': 'Words played',
         'best_word': 'Best word', 'reset': 'Reset', 'sound': 'Sound',
+        'how_to_play': 'How to Play?',
+        'faq_text': (
+            '[b]Which words are accepted?[/b]\n'
+            '• Every word must start with the shown letter — the last '
+            'letter of the previous word.\n'
+            '• Words are checked against the selected dictionary language; '
+            'only words of that language are valid.\n'
+            '• The dictionary contains base (dictionary) forms — proper '
+            'names and most inflected forms are not accepted.\n'
+            '• Each word can be used only once per game.\n'
+            '• Offensive words are not accepted.\n\n'
+            '[b]Scoring & time[/b]\n'
+            '• Rare letters score more points.\n'
+            '• If your turn timer runs out, you lose — regardless of score.\n'
+            '• When total time ends, the higher score wins.\n'
+            '• Leaving mid-game counts as a loss.\n\n'
+            '[b]Letters & accents[/b]\n'
+            '• You can type without accents (é → e).\n'
+            '• Turkish: a word ending in ğ chains to g.\n'
+            '• Russian: ё = е; endings ь/ъ/ы skip '
+            'back one letter.'
+        ),
         'settings': 'Settings',
         'creating_room': 'Creating room...\n(first connect may take up to a minute)',
         'no_server': 'Could not reach server!',
@@ -123,6 +145,27 @@ CEVIRILER = {
         'games': 'Oyun', 'wins': 'Galibiyet', 'losses': 'Mağlubiyet', 'draws': 'Beraberlik',
         'win_rate': 'Kazanma %', 'words_played': 'Oynanan kelime',
         'best_word': 'En iyi kelime', 'reset': 'Sıfırla', 'sound': 'Ses',
+        'how_to_play': 'Nasıl Oynanır?',
+        'faq_text': (
+            '[b]Hangi kelimeler kabul edilir?[/b]\n'
+            '• Her kelime, gösterilen harfle — yani önceki kelimenin son '
+            'harfiyle — başlamalıdır.\n'
+            '• Kelimeler seçili sözlük diline göre denetlenir; yalnızca o '
+            'dilin kelimeleri geçerlidir.\n'
+            '• Sözlükte kelimelerin temel (sözlük) halleri vardır — özel '
+            'isimler ve çoğu çekimli hal kabul edilmez.\n'
+            '• Bir kelime oyunda yalnızca bir kez kullanılabilir.\n'
+            '• Hakaret içeren kelimeler kabul edilmez.\n\n'
+            '[b]Puan ve süre[/b]\n'
+            '• Nadir harfler daha çok puan getirir.\n'
+            '• Hamle süreniz dolarsa puandan bağımsız kaybedersiniz.\n'
+            '• Toplam süre bitince yüksek puanlı kazanır.\n'
+            '• Oyun ortasında çıkmak mağlubiyet sayılır.\n\n'
+            '[b]Harfler ve aksanlar[/b]\n'
+            '• Aksansız yazabilirsiniz (é → e).\n'
+            '• Türkçe: ğ ile biten kelimeden sonra g ile başlanır.\n'
+            '• Rusça: ё = е; sondaki ь/ъ/ы bir önceki harfe atlanır.'
+        ),
         'settings': 'Ayarlar',
         'creating_room': 'Oda oluşturuluyor...\n(ilk bağlantı bir dakika sürebilir)',
         'no_server': 'Sunucuya ulaşılamadı!',
@@ -199,6 +242,27 @@ CEVIRILER = {
         'games': 'Spiele', 'wins': 'Siege', 'losses': 'Niederlagen', 'draws': 'Unentschieden',
         'win_rate': 'Siegquote', 'words_played': 'Wörter gespielt',
         'best_word': 'Bestes Wort', 'reset': 'Zurücksetzen', 'sound': 'Ton',
+        'how_to_play': 'Wie spielt man?',
+        'faq_text': (
+            '[b]Welche Wörter werden akzeptiert?[/b]\n'
+            '• Jedes Wort muss mit dem angezeigten Buchstaben beginnen — dem '
+            'letzten Buchstaben des vorherigen Wortes.\n'
+            '• Wörter werden gegen die gewählte Wörterbuchsprache geprüft; '
+            'nur Wörter dieser Sprache sind gültig.\n'
+            '• Das Wörterbuch enthält Grundformen — Eigennamen und die '
+            'meisten gebeugten Formen werden nicht akzeptiert.\n'
+            '• Jedes Wort kann pro Spiel nur einmal verwendet werden.\n'
+            '• Beleidigende Wörter werden nicht akzeptiert.\n\n'
+            '[b]Punkte & Zeit[/b]\n'
+            '• Seltene Buchstaben bringen mehr Punkte.\n'
+            '• Läuft deine Zugzeit ab, verlierst du — unabhängig vom Stand.\n'
+            '• Endet die Gesamtzeit, gewinnt die höhere Punktzahl.\n'
+            '• Wer das Spiel vorzeitig verlässt, verliert.\n\n'
+            '[b]Buchstaben & Akzente[/b]\n'
+            '• Du kannst ohne Umlaute tippen (ä → a, ß → ss).\n'
+            '• Türkisch: Ein Wort, das auf ğ endet, wird mit g fortgesetzt.\n'
+            '• Russisch: ё = е; Endungen ь/ъ/ы springen einen Buchstaben zurück.'
+        ),
         'settings': 'Einstellungen',
         'creating_room': 'Raum wird erstellt...\n(erste Verbindung kann bis zu einer Minute dauern)',
         'no_server': 'Server nicht erreichbar!',
@@ -275,6 +339,28 @@ CEVIRILER = {
         'games': 'Partidas', 'wins': 'Victorias', 'losses': 'Derrotas', 'draws': 'Empates',
         'win_rate': '% Victorias', 'words_played': 'Palabras jugadas',
         'best_word': 'Mejor palabra', 'reset': 'Reiniciar', 'sound': 'Sonido',
+        'how_to_play': '¿Cómo se juega?',
+        'faq_text': (
+            '[b]¿Qué palabras se aceptan?[/b]\n'
+            '• Cada palabra debe empezar por la letra mostrada — la última '
+            'letra de la palabra anterior.\n'
+            '• Las palabras se comprueban con el idioma de diccionario '
+            'elegido; solo valen palabras de ese idioma.\n'
+            '• El diccionario contiene formas base — los nombres propios y '
+            'la mayoría de formas flexionadas no se aceptan.\n'
+            '• Cada palabra solo puede usarse una vez por partida.\n'
+            '• No se aceptan palabras ofensivas.\n\n'
+            '[b]Puntos y tiempo[/b]\n'
+            '• Las letras raras dan más puntos.\n'
+            '• Si se agota tu tiempo de turno, pierdes — sin importar la '
+            'puntuación.\n'
+            '• Al acabar el tiempo total, gana la puntuación más alta.\n'
+            '• Abandonar a mitad de partida cuenta como derrota.\n\n'
+            '[b]Letras y acentos[/b]\n'
+            '• Puedes escribir sin tildes (é → e); la ñ se conserva.\n'
+            '• Turco: una palabra que termina en ğ continúa con g.\n'
+            '• Ruso: ё = е; las terminaciones ь/ъ/ы saltan una letra atrás.'
+        ),
         'settings': 'Ajustes',
         'creating_room': 'Creando sala...\n(la primera conexión puede tardar un minuto)',
         'no_server': '¡No se pudo conectar al servidor!',
@@ -351,6 +437,28 @@ CEVIRILER = {
         'games': 'Parties', 'wins': 'Victoires', 'losses': 'Défaites', 'draws': 'Nuls',
         'win_rate': '% Victoires', 'words_played': 'Mots joués',
         'best_word': 'Meilleur mot', 'reset': 'Réinitialiser', 'sound': 'Son',
+        'how_to_play': 'Comment jouer ?',
+        'faq_text': (
+            '[b]Quels mots sont acceptés ?[/b]\n'
+            '• Chaque mot doit commencer par la lettre affichée — la '
+            'dernière lettre du mot précédent.\n'
+            '• Les mots sont vérifiés selon la langue du dictionnaire '
+            'choisie ; seuls les mots de cette langue sont valides.\n'
+            '• Le dictionnaire contient les formes de base — les noms '
+            'propres et la plupart des formes fléchies sont refusés.\n'
+            '• Chaque mot ne peut être joué qu\'une fois par partie.\n'
+            '• Les mots offensants sont refusés.\n\n'
+            '[b]Points et temps[/b]\n'
+            '• Les lettres rares rapportent plus de points.\n'
+            '• Si votre temps de tour expire, vous perdez — quel que soit '
+            'le score.\n'
+            '• À la fin du temps total, le meilleur score gagne.\n'
+            '• Quitter en cours de partie compte comme une défaite.\n\n'
+            '[b]Lettres et accents[/b]\n'
+            '• Vous pouvez écrire sans accents (é → e).\n'
+            '• Turc : un mot finissant par ğ enchaîne sur g.\n'
+            '• Russe : ё = е ; les finales ь/ъ/ы reculent d\'une lettre.'
+        ),
         'settings': 'Paramètres',
         'creating_room': 'Création du salon...\n(la première connexion peut prendre une minute)',
         'no_server': 'Serveur injoignable !',
@@ -427,6 +535,29 @@ CEVIRILER = {
         'games': 'Игры', 'wins': 'Победы', 'losses': 'Поражения', 'draws': 'Ничьи',
         'win_rate': '% Побед', 'words_played': 'Сыграно слов',
         'best_word': 'Лучшее слово', 'reset': 'Сбросить', 'sound': 'Звук',
+        'how_to_play': 'Как играть?',
+        'faq_text': (
+            '[b]Какие слова принимаются?[/b]\n'
+            '• Каждое слово должно начинаться с показанной буквы — '
+            'последней буквы предыдущего слова.\n'
+            '• Слова проверяются по выбранному языку словаря; '
+            'засчитываются только слова этого языка.\n'
+            '• Словарь содержит начальные формы — имена собственные и '
+            'большинство словоформ не принимаются.\n'
+            '• Каждое слово можно сыграть только один раз за игру.\n'
+            '• Оскорбительные слова не принимаются.\n\n'
+            '[b]Очки и время[/b]\n'
+            '• Редкие буквы приносят больше очков.\n'
+            '• Если время хода истекло, вы проигрываете — независимо от '
+            'счёта.\n'
+            '• Когда общее время заканчивается, побеждает больший счёт.\n'
+            '• Выход из игры засчитывается как поражение.\n\n'
+            '[b]Буквы[/b]\n'
+            '• ё = е.\n'
+            '• Если слово заканчивается на ь/ъ/ы, берётся предыдущая '
+            'буква.\n'
+            '• Турецкий: слово на ğ продолжается с g.'
+        ),
         'settings': 'Настройки',
         'creating_room': 'Создание комнаты...\n(первое подключение может занять минуту)',
         'no_server': 'Сервер недоступен!',

@@ -45,6 +45,40 @@ _ZINCIR_HARF = {'tr': {'ğ': 'g'}}
 # gerilenir. ru: ь/ъ/ы (yumuşak/sert işaret ve ы ile kelime başlamaz).
 _ATLANAN_SON = {'ru': set('ьъы')}
 
+# Oyunda kabul edilmeyecek kelimeler (ırkçı hakaret / ağır küfür) — kaynak
+# sözlüklerde bulunabildikleri için yüklenirken çıkarılır. Kelimeler sözlükteki
+# SAKLANMA biçimiyle yazılmalı (aksanlar sadeleştirilmiş; bkz. _aksan_sadelestir).
+# Yeni kelime eklemek: ilgili dilin kümesine ekle (hem server hem client kopyasına).
+YASAKLI = {
+    'en': {
+        'nigger', 'niggers', 'nigga', 'niggas', 'negro', 'negros', 'negroes',
+        'faggot', 'faggots', 'fag', 'fags', 'kike', 'kikes', 'spic', 'spics',
+        'chink', 'chinks', 'gook', 'gooks', 'wetback', 'wetbacks', 'coon',
+        'coons', 'tranny', 'trannies', 'dyke', 'dykes', 'cunt', 'cunts',
+        'retard', 'retards',
+    },
+    'tr': {
+        'orospu', 'piç', 'yarak', 'yarrak', 'amcık', 'am', 'sik', 'sikmek',
+        'siktir', 'ibne', 'pezevenk', 'kaltak', 'göt', 'gavat',
+    },
+    'de': {
+        'neger', 'nigger', 'fotze', 'fotzen', 'schwuchtel', 'schwuchteln',
+        'hurensohn', 'hurensohne', 'kanake', 'kanaken',
+    },
+    'es': {
+        'maricon', 'maricones', 'negrata', 'negratas', 'sudaca', 'sudacas',
+        'puta', 'putas', 'puto', 'putos',
+    },
+    'fr': {
+        'negre', 'negres', 'pede', 'pedes', 'encule', 'encules', 'pute',
+        'putes', 'salope', 'salopes', 'connard', 'connards',
+    },
+    'ru': {
+        'хуй', 'пизда', 'ебать', 'пидор', 'пидоры', 'пидорас', 'пидарас',
+        'блядь', 'мудак', 'мудаки',
+    },
+}
+
 
 def _aksan_sadelestir(metin, dil):
     """Sözlük/girdi normalizasyonu: de/es/fr aksanları taban harfe indirir
@@ -83,23 +117,24 @@ def _sozluk_yukle_dosya(path):
 
 
 def _tek_sozluk_yukle(kod):
-    """Tek bir dilin words_<kod>.txt dosyasını yükler (aksanlı diller sadeleştirilir)."""
+    """Tek bir dilin words_<kod>.txt dosyasını yükler (aksanlı diller
+    sadeleştirilir, YASAKLI kelimeler çıkarılır)."""
     d = os.path.dirname(__file__)
     p = os.path.join(d, f'words_{kod}.txt')
+    ham = set()
     if os.path.exists(p):
         ham = _sozluk_yukle_dosya(p)
         if kod in SADELESTIR or kod == 'ru':
             ham = {_aksan_sadelestir(w, kod) for w in ham}
-        return ham
-    # Geriye dönük: en için geliştirme makinesindeki NLTK'dan yükle
-    if kod == 'en':
+    elif kod == 'en':
+        # Geriye dönük: en için geliştirme makinesindeki NLTK'dan yükle
         nltk_dosya = os.path.join(
             os.path.expanduser('~'),
             'AppData', 'Roaming', 'nltk_data', 'corpora', 'words', 'en'
         )
         if os.path.exists(nltk_dosya):
-            return _sozluk_yukle_dosya(nltk_dosya)
-    return set()
+            ham = _sozluk_yukle_dosya(nltk_dosya)
+    return ham - YASAKLI.get(kod, set())
 
 
 # Sözlükler İLK KULLANIMDA (lazy) yüklenir ve burada cache'lenir — başlangıç

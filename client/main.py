@@ -36,7 +36,10 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
 
-Window.softinput_mode = 'below_target'
+# 'pan': klavye açılınca pencere yukarı kayar — giriş kutusu HER cihazda görünür
+# kalır ('below_target' bazı Android cihazlarda kaydırmıyordu, kelime yazarken
+# görünmüyordu).
+Window.softinput_mode = 'pan'
 from kivy.graphics import Color, RoundedRectangle, Line, Ellipse
 from kivy.graphics.texture import Texture
 from kivy.metrics import dp
@@ -260,6 +263,21 @@ def ciz_sohbet_ikonu(btn, renk=(0, 0, 0, 1)):
             Color(*KIRMIZI)
             Ellipse(pos=(btn.right - br * 2.0, btn.top - br * 2.0),
                     size=(2 * br, 2 * br))
+
+
+def ciz_liste_ikonu(btn, renk=(0, 0, 0, 1)):
+    """Kelime listesi ikonu: madde imli 3 satır."""
+    btn.canvas.after.clear()
+    m = min(btn.width, btn.height)
+    x0 = btn.center_x - m * 0.26
+    x1 = btn.center_x + m * 0.28
+    r = m * 0.045
+    with btn.canvas.after:
+        Color(*renk)
+        for ry in (0.66, 0.5, 0.34):
+            yy = btn.y + btn.height * ry
+            Ellipse(pos=(x0 - r, yy - r), size=(2 * r, 2 * r))
+            Line(points=[x0 + m * 0.12, yy, x1, yy], width=dp(1.8))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -508,6 +526,10 @@ class OyunEkrani(Screen):
                                  renk=(0.5, 0.5, 0.5, 1), hizala='left')
         self.kelime_lbl = etiket(t('words_count', n=0), boyut=12,
                                  renk=(0.4, 0.4, 0.4, 1))
+        self.liste_btn = ikon_buton(ciz_liste_ikonu, renk_bg=MOR,
+                                    callback=lambda *_: self._kelime_listesi())
+        self.liste_btn.size_hint_x = None
+        self.liste_btn.width = dp(52)
         self.sohbet_btn = ikon_buton(ciz_sohbet_ikonu, renk_bg=MAVI,
                                      callback=lambda *_: App.get_running_app().sohbet_ac())
         self.sohbet_btn.size_hint_x = None
@@ -518,6 +540,7 @@ class OyunEkrani(Screen):
         cik.width = dp(64)
         ust.add_widget(self.toplam_lbl)
         ust.add_widget(self.kelime_lbl)
+        ust.add_widget(self.liste_btn)
         ust.add_widget(self.sohbet_btn)
         ust.add_widget(cik)
         kok.add_widget(ust)
@@ -533,6 +556,7 @@ class OyunEkrani(Screen):
         kart(self.zincir_scroll, renk=(0.1, 0.1, 0.1, 1), radius=8)
         kok.add_widget(self.zincir_scroll)
         self._zincir_uzunluk = -1
+        self._zincir_son = []
 
         oyuncu_satir = BoxLayout(size_hint_y=None, height=dp(86), spacing=dp(12))
         self.p1_kutu = BoxLayout(orientation='vertical', spacing=dp(4), padding=dp(10))
@@ -682,7 +706,44 @@ class OyunEkrani(Screen):
                 Color(*GENC)
             RoundedRectangle(pos=kutu.pos, size=kutu.size, radius=[dp(12)])
 
+    def _kelime_listesi(self):
+        """Oynanan tüm kelimeleri (kim, kaç puan) kaydırılabilir popup'ta gösterir."""
+        icerik = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(10))
+        scroll = ScrollView()
+        kutu = BoxLayout(orientation='vertical', size_hint_y=None,
+                         spacing=dp(4), padding=[0, dp(4)])
+        kutu.bind(minimum_height=kutu.setter('height'))
+        scroll.add_widget(kutu)
+        icerik.add_widget(scroll)
+
+        zincir = self._zincir_son
+        if not zincir:
+            kutu.add_widget(Label(text=t('no_words_yet'), font_size=dp(14),
+                                  color=(0.5, 0.5, 0.5, 1),
+                                  size_hint_y=None, height=dp(30)))
+        for i, oge in enumerate(zincir, start=1):
+            renk = YESIL if oge.get('no') == 1 else MAVI
+            satir = BoxLayout(size_hint_y=None, height=dp(30))
+            sol = Label(text=f"{i}. {oge.get('kelime', '')}", font_size=dp(16),
+                        bold=True, color=renk, halign='left', valign='middle')
+            sol.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
+            sag = Label(text=f"+{oge.get('puan', 0)}", font_size=dp(14),
+                        color=(0.7, 0.7, 0.7, 1), size_hint_x=None, width=dp(52),
+                        halign='right', valign='middle')
+            sag.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
+            satir.add_widget(sol)
+            satir.add_widget(sag)
+            kutu.add_widget(satir)
+
+        pop = Popup(title=f"{t('words_used')} ({len(zincir)})", content=icerik,
+                    size_hint=(0.92, 0.8), title_color=(1, 1, 1, 1),
+                    separator_color=MOR)
+        pop.open()
+        # En son oynanan kelime altta — oraya kaydır
+        Clock.schedule_once(lambda dt: setattr(scroll, 'scroll_y', 0), 0.1)
+
     def _zincir_guncelle(self, zincir):
+        self._zincir_son = zincir
         if len(zincir) == self._zincir_uzunluk:
             return
         self._zincir_uzunluk = len(zincir)
@@ -909,6 +970,13 @@ class AyarlarEkrani(Screen):
         secim_vurgu(self._ses_btn, app.ayar.get('sound', True))
         ust_satir.add_widget(self._ses_btn)
         self._kok.add_widget(ust_satir)
+
+        # ── Nasıl Oynanır / SSS ──
+        sss_btn = buton(t('how_to_play'), renk_bg=TURUNCU, boyut=14,
+                        callback=lambda *_: self._faq_popup())
+        sss_btn.size_hint_y = None
+        sss_btn.height = dp(46)
+        self._kok.add_widget(sss_btn)
         self._kok.add_widget(Label(size_hint_y=None, height=dp(8)))
 
         # ── BÖLÜM 1: Uygulama Dili ──
@@ -963,6 +1031,20 @@ class AyarlarEkrani(Screen):
         secim_vurgu(self._ses_btn, yeni)
         if yeni:
             app.sesler.cal('success')   # açınca örnek ses
+
+    def _faq_popup(self):
+        """Nasıl Oynanır / SSS — kural ve kabul edilen kelime açıklaması."""
+        icerik = BoxLayout(orientation='vertical', padding=dp(12))
+        scroll = ScrollView(do_scroll_x=False)
+        lbl = Label(text=t('faq_text'), markup=True, font_size=dp(14),
+                    color=(0.9, 0.9, 0.9, 1), size_hint_y=None,
+                    halign='left', valign='top')
+        lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
+        lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + dp(8)))
+        scroll.add_widget(lbl)
+        icerik.add_widget(scroll)
+        Popup(title=t('how_to_play'), content=icerik, size_hint=(0.92, 0.85),
+              title_color=(1, 1, 1, 1), separator_color=TURUNCU).open()
 
     def _istatistik_popup(self):
         app = App.get_running_app()
