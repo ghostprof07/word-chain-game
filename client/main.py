@@ -1292,6 +1292,7 @@ class WordChainOnlineApp(App):
     # ── Bağlantı yönetimi ────────────────────────────────────────────────────
     def baglan_ve_gec(self, oda_kodu, ad):
         self._offline_temizle()
+        self._sohbet_sifirla()   # yeni oda: önceki oyunun mesajları taşınmasın
         self.sm.get_screen('oyun').sohbet_goster(True)
         self.sm.get_screen('oyun').training_mode(False)   # online: rakip görünür
         self._oda_kodu = oda_kodu
@@ -1378,6 +1379,14 @@ class WordChainOnlineApp(App):
             self.sm.get_screen('lobi').hazir_guncelle(d)
 
     # ── SOHBET ───────────────────────────────────────────────────────────────
+    def _sohbet_sifirla(self):
+        """Chat geçmişini, okunmamış rozetini ve açık popup'ı temizler."""
+        self._sohbet = []
+        self._okunmamis = 0
+        if self._sohbet_popup is not None:
+            self._sohbet_popup.dismiss()   # on_dismiss popup/kutu referanslarını sıfırlar
+        self._sohbet_rozet_guncelle()
+
     @staticmethod
     def _hex(renk):
         return ''.join(f'{int(c * 255):02x}' for c in renk[:3])
