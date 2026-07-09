@@ -47,6 +47,8 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
+from kivy.uix.recycleboxlayout import RecycleBoxLayout
+from kivy.uix.recycleview import RecycleView
 from kivy.uix.screenmanager import ScreenManager, Screen, FadeTransition
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
@@ -294,6 +296,12 @@ class BaglanEkrani(Screen):
         kok.add_widget(Label(size_hint_y=None, height=dp(22)))
         ust = BoxLayout(size_hint_y=None, height=dp(34))
         ust.add_widget(Label())  # esnek boşluk
+        sss_btn = buton('?', renk_bg=GENC, renk_yazi=(0.85, 0.85, 0.85, 1), boyut=18,
+                        callback=lambda *_: App.get_running_app().faq_ac())
+        sss_btn.size_hint_x = None
+        sss_btn.width = dp(44)
+        ust.add_widget(sss_btn)
+        ust.add_widget(Label(size_hint_x=None, width=dp(8)))
         ayar_btn = ikon_buton(ciz_ayar_ikonu, renk_bg=GENC,
                               callback=lambda *_: App.get_running_app().ayarlari_ac())
         ayar_btn.size_hint_x = None
@@ -1006,12 +1014,15 @@ class AyarlarEkrani(Screen):
         ust_satir.add_widget(self._ses_btn)
         self._kok.add_widget(ust_satir)
 
-        # ── Nasıl Oynanır / SSS ──
+        # ── Nasıl Oynanır / SSS + Tüm Kelimeler (sözlük tarayıcı) ──
+        alt_satir = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         sss_btn = buton(t('how_to_play'), renk_bg=TURUNCU, boyut=14,
-                        callback=lambda *_: self._faq_popup())
-        sss_btn.size_hint_y = None
-        sss_btn.height = dp(46)
-        self._kok.add_widget(sss_btn)
+                        callback=lambda *_: app.faq_ac())
+        alt_satir.add_widget(sss_btn)
+        sozluk_btn = buton(t('all_words'), renk_bg=MAVI, boyut=14,
+                           callback=lambda *_: app.sozluk_ac())
+        alt_satir.add_widget(sozluk_btn)
+        self._kok.add_widget(alt_satir)
         self._kok.add_widget(Label(size_hint_y=None, height=dp(8)))
 
         # ── BÖLÜM 1: Uygulama Dili ──
@@ -1066,20 +1077,6 @@ class AyarlarEkrani(Screen):
         secim_vurgu(self._ses_btn, yeni)
         if yeni:
             app.sesler.cal('success')   # açınca örnek ses
-
-    def _faq_popup(self):
-        """Nasıl Oynanır / SSS — kural ve kabul edilen kelime açıklaması."""
-        icerik = BoxLayout(orientation='vertical', padding=dp(12))
-        scroll = ScrollView(do_scroll_x=False)
-        lbl = Label(text=t('faq_text'), markup=True, font_size=dp(14),
-                    color=(0.9, 0.9, 0.9, 1), size_hint_y=None,
-                    halign='left', valign='top')
-        lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
-        lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + dp(8)))
-        scroll.add_widget(lbl)
-        icerik.add_widget(scroll)
-        Popup(title=t('how_to_play'), content=icerik, size_hint=(0.92, 0.85),
-              title_color=(1, 1, 1, 1), separator_color=TURUNCU).open()
 
     def _istatistik_popup(self):
         app = App.get_running_app()
@@ -1325,6 +1322,62 @@ class WordChainOnlineApp(App):
     def sozluk_dili_degistir(self, kod):
         self.ayar['dict_lang'] = kod
         settings_store.kaydet(self.user_data_dir, self.ayar)
+
+    # ── SSS ve sözlük tarayıcı (ana ekran + ayarlardan erişilir) ─────────────
+    def faq_ac(self):
+        """Nasıl Oynanır / SSS — kural ve kabul edilen kelime açıklaması."""
+        icerik = BoxLayout(orientation='vertical', padding=dp(12))
+        scroll = ScrollView(do_scroll_x=False)
+        lbl = Label(text=t('faq_text'), markup=True, font_size=dp(14),
+                    color=(0.9, 0.9, 0.9, 1), size_hint_y=None,
+                    halign='left', valign='top')
+        lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
+        lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + dp(8)))
+        scroll.add_widget(lbl)
+        icerik.add_widget(scroll)
+        Popup(title=t('how_to_play'), content=icerik, size_hint=(0.92, 0.85),
+              title_color=(1, 1, 1, 1), separator_color=TURUNCU).open()
+
+    def sozluk_ac(self):
+        """Seçili sözlük dilindeki TÜM geçerli kelimeleri arama kutusuyla listeler.
+        47 bin+ satır için RecycleView (yalnızca görünen satırlar çizilir)."""
+        from game_logic import sozluk_getir   # lazy: ilk açılışta yüklenir
+        dil = self.ayar['dict_lang']
+        kelimeler = sorted(sozluk_getir(dil))
+
+        icerik = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
+        ara = giris_kutusu(t('search_word'), size_hint_y=None, height=dp(46),
+                           font_size=dp(17))
+        icerik.add_widget(ara)
+        sayi_lbl = etiket(t('words_count', n=len(kelimeler)), boyut=11,
+                          renk=(0.5, 0.5, 0.5, 1), size_hint_y=None, height=dp(18))
+        icerik.add_widget(sayi_lbl)
+
+        rv = RecycleView(do_scroll_x=False, bar_width=dp(4))
+        rv.viewclass = 'Label'
+        yerlesim = RecycleBoxLayout(orientation='vertical', size_hint_y=None,
+                                    default_size=(None, dp(30)),
+                                    default_size_hint=(1, None))
+        yerlesim.bind(minimum_height=yerlesim.setter('height'))
+        rv.add_widget(yerlesim)
+        icerik.add_widget(rv)
+
+        def _goster(liste):
+            rv.data = [{'text': w, 'font_size': dp(16),
+                        'color': (0.88, 0.88, 0.88, 1)} for w in liste]
+            sayi_lbl.text = t('words_count', n=len(liste))
+            rv.scroll_y = 1
+
+        def _filtrele(_inst, metin):
+            q = metin.strip().lower()
+            _goster([w for w in kelimeler if w.startswith(q)] if q else kelimeler)
+
+        ara.bind(text=_filtrele)
+        _goster(kelimeler)
+
+        Popup(title=f"{t('all_words')} — {SOZLUK_DILLERI.get(dil, dil)}",
+              content=icerik, size_hint=(0.94, 0.9),
+              title_color=(1, 1, 1, 1), separator_color=MAVI).open()
 
     # ── Kelime gönderme (online ya da offline'a yönlendirir) ──────────────────
     def kelime_gonder(self, kelime):
