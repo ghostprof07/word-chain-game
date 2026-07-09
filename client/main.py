@@ -267,6 +267,17 @@ def ciz_sohbet_ikonu(btn, renk=(0, 0, 0, 1)):
                     size=(2 * br, 2 * br))
 
 
+class AnlamLabel(Label):
+    """[ref=kelime] işaretli metin — kelimeye dokununca anlam penceresi açılır.
+    RecycleView viewclass olarak da kullanılır (Factory kaydı aşağıda)."""
+    def on_ref_press(self, ref):
+        App.get_running_app().anlam_ac(ref)
+
+
+from kivy.factory import Factory  # noqa: E402  (AnlamLabel tanımından sonra)
+Factory.register('AnlamLabel', cls=AnlamLabel)
+
+
 def ciz_liste_ikonu(btn, renk=(0, 0, 0, 1)):
     """Kelime listesi ikonu: madde imli 3 satır."""
     btn.canvas.after.clear()
@@ -755,15 +766,21 @@ class OyunEkrani(Screen):
         icerik.add_widget(scroll)
 
         zincir = self._zincir_son
-        if not zincir:
+        if zincir:
+            kutu.add_widget(etiket(t('tap_for_meaning'), boyut=10,
+                                   renk=(0.45, 0.4, 0.55, 1), hizala='left',
+                                   size_hint_y=None, height=dp(16)))
+        else:
             kutu.add_widget(Label(text=t('no_words_yet'), font_size=dp(14),
                                   color=(0.5, 0.5, 0.5, 1),
                                   size_hint_y=None, height=dp(30)))
         for i, oge in enumerate(zincir, start=1):
             renk = YESIL if oge.get('no') == 1 else MAVI
+            kelime = oge.get('kelime', '')
             satir = BoxLayout(size_hint_y=None, height=dp(30))
-            sol = Label(text=f"{i}. {oge.get('kelime', '')}", font_size=dp(16),
-                        bold=True, color=renk, halign='left', valign='middle')
+            sol = AnlamLabel(text=f"{i}. [ref={kelime}]{kelime}[/ref]",
+                             markup=True, font_size=dp(16),
+                             bold=True, color=renk, halign='left', valign='middle')
             sol.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
             sag = Label(text=f"+{oge.get('puan', 0)}", font_size=dp(14),
                         color=(0.7, 0.7, 0.7, 1), size_hint_x=None, width=dp(52),
@@ -880,12 +897,16 @@ class SonucEkrani(Screen):
             istat.add_widget(k)
         self._kok.add_widget(istat)
 
-        self._kok.add_widget(etiket(t('words_used'), boyut=12,
-                                    renk=(0.5, 0.5, 0.5, 1), size_hint_y=None,
-                                    height=dp(18)))
+        self._kok.add_widget(etiket(f"{t('words_used')} — {t('tap_for_meaning')}",
+                                    boyut=12, renk=(0.5, 0.5, 0.5, 1),
+                                    size_hint_y=None, height=dp(18)))
         kelimeler = d.get('kullanilan', [])
-        self._kok.add_widget(etiket('  '.join(kelimeler) if kelimeler else '—',
-                                    boyut=13, renk=(0.7, 0.7, 0.7, 1)))
+        kelime_lbl = etiket(
+            '  '.join(f'[ref={w}]{w}[/ref]' for w in kelimeler) if kelimeler else '—',
+            boyut=13, renk=(0.7, 0.7, 0.7, 1), markup=True)
+        kelime_lbl.bind(on_ref_press=lambda _inst, ref:
+                        App.get_running_app().anlam_ac(ref))
+        self._kok.add_widget(kelime_lbl)
 
         self._rematch_durum = etiket('', boyut=13, kalin=True, renk=SARI,
                                      size_hint_y=None, height=dp(24))
@@ -1352,9 +1373,12 @@ class WordChainOnlineApp(App):
         sayi_lbl = etiket(t('words_count', n=len(kelimeler)), boyut=11,
                           renk=(0.5, 0.5, 0.5, 1), size_hint_y=None, height=dp(18))
         icerik.add_widget(sayi_lbl)
+        icerik.add_widget(etiket(t('tap_for_meaning'), boyut=10,
+                                 renk=(0.45, 0.4, 0.55, 1),
+                                 size_hint_y=None, height=dp(16)))
 
         rv = RecycleView(do_scroll_x=False, bar_width=dp(4))
-        rv.viewclass = 'Label'
+        rv.viewclass = 'AnlamLabel'
         yerlesim = RecycleBoxLayout(orientation='vertical', size_hint_y=None,
                                     default_size=(None, dp(30)),
                                     default_size_hint=(1, None))
@@ -1363,7 +1387,8 @@ class WordChainOnlineApp(App):
         icerik.add_widget(rv)
 
         def _goster(liste):
-            rv.data = [{'text': w, 'font_size': dp(16),
+            rv.data = [{'text': f'[ref={w}]{w}[/ref]', 'markup': True,
+                        'font_size': dp(16),
                         'color': (0.88, 0.88, 0.88, 1)} for w in liste]
             sayi_lbl.text = t('words_count', n=len(liste))
             rv.scroll_y = 1
@@ -1378,6 +1403,90 @@ class WordChainOnlineApp(App):
         Popup(title=f"{t('all_words')} — {SOZLUK_DILLERI.get(dil, dil)}",
               content=icerik, size_hint=(0.94, 0.9),
               title_color=(1, 1, 1, 1), separator_color=MAVI).open()
+
+    # ── Kelime anlamı ────────────────────────────────────────────────────────
+    def anlam_ac(self, kelime):
+        """Kelimenin anlamını gösterir: tr=TDK, en=dictionaryapi.dev (uygulama
+        içi popup); diğer dillerde Wiktionary sayfası tarayıcıda açılır."""
+        kelime = (kelime or '').strip()
+        if not kelime:
+            return
+        dil = self.ayar['dict_lang']
+        if dil not in ('tr', 'en'):
+            self._tarayici_ac(f'https://{dil}.wiktionary.org/wiki/{kelime}')
+            return
+
+        icerik = BoxLayout(orientation='vertical', padding=dp(12))
+        scroll = ScrollView(do_scroll_x=False)
+        lbl = Label(text=t('loading'), font_size=dp(15),
+                    color=(0.9, 0.9, 0.9, 1), size_hint_y=None,
+                    halign='left', valign='top')
+        lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
+        lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + dp(8)))
+        scroll.add_widget(lbl)
+        icerik.add_widget(scroll)
+        Popup(title=kelime, content=icerik, size_hint=(0.9, 0.6),
+              title_color=(1, 1, 1, 1), separator_color=YESIL).open()
+
+        def _arka_plan():
+            metin = self._anlam_getir(kelime, dil)
+            Clock.schedule_once(lambda dt: setattr(lbl, 'text', metin))
+
+        import threading
+        threading.Thread(target=_arka_plan, daemon=True).start()
+
+    @staticmethod
+    def _anlam_getir(kelime, dil):
+        """Anlamı çevrimiçi sözlükten çeker (arka plan thread'inde çalışır)."""
+        import requests
+        try:
+            satirlar = []
+            if dil == 'tr':
+                r = requests.get('https://sozluk.gov.tr/gts',
+                                 params={'ara': kelime}, timeout=8,
+                                 headers={'User-Agent': 'Mozilla/5.0 (Lexicoil)'})
+                veri = r.json()
+                if isinstance(veri, list):
+                    for madde in veri:
+                        for a in madde.get('anlamlarListe') or []:
+                            anlam = (a.get('anlam') or '').strip()
+                            if anlam:
+                                satirlar.append(anlam)
+            else:   # en
+                r = requests.get('https://api.dictionaryapi.dev/api/v2/entries/en/'
+                                 + kelime, timeout=8)
+                veri = r.json()
+                if isinstance(veri, list):
+                    for giris in veri:
+                        for m in giris.get('meanings') or []:
+                            tur = m.get('partOfSpeech') or ''
+                            for tanim in m.get('definitions') or []:
+                                d = (tanim.get('definition') or '').strip()
+                                if d:
+                                    satirlar.append(f'({tur}) {d}' if tur else d)
+            if not satirlar:
+                return t('no_definition')
+            satirlar = satirlar[:8]   # en fazla 8 anlam — popup taşmasın
+            return '\n\n'.join(f'{i}. {s}' for i, s in enumerate(satirlar, 1))
+        except Exception:
+            return t('definition_error')
+
+    @staticmethod
+    def _tarayici_ac(url):
+        """URL'yi cihazın tarayıcısında açar (Android'de Intent ile)."""
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
+                intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                autoclass('org.kivy.android.PythonActivity').mActivity \
+                    .startActivity(intent)
+                return
+            except Exception:
+                pass
+        import webbrowser
+        webbrowser.open(url)
 
     # ── Kelime gönderme (online ya da offline'a yönlendirir) ──────────────────
     def kelime_gonder(self, kelime):
