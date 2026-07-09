@@ -360,14 +360,29 @@ class BaglanEkrani(Screen):
         return self.ad_giris.text.strip() or t('player')
 
     def _solo_popup(self):
-        """Tek kişilik (offline) oyun seçimi: Bota karşı + zorluk."""
+        """Offline oyun seçimi: İki kişi (tek telefon) + Bota karşı + Antrenman."""
         icerik = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(16))
+        pop = Popup(title=t('solo_title'), content=icerik, size_hint=(0.9, None),
+                    height=dp(580), title_color=(1, 1, 1, 1), separator_color=MOR)
+
+        # ── İki kişi — tek telefon (elden ele) ──
+        icerik.add_widget(etiket(t('pass_and_play'), boyut=15, kalin=True, renk=TURUNCU,
+                                 size_hint_y=None, height=dp(26)))
+        p2_giris = giris_kutusu(t('player2_name'), size_hint_y=None, height=dp(46),
+                                font_size=dp(16))
+        icerik.add_widget(p2_giris)
+        ik = buton(t('two_players'), renk_bg=TURUNCU, renk_yazi=(0, 0, 0, 1), boyut=14)
+        ik.size_hint_y = None
+        ik.height = dp(50)
+        ik.bind(on_press=lambda _b: (
+            pop.dismiss(), App.get_running_app().iki_kisi_basla(p2_giris.text)))
+        icerik.add_widget(ik)
+
+        # ── Bota karşı ──
         icerik.add_widget(etiket(t('vs_bot'), boyut=17, kalin=True, renk=PEMBE,
                                  size_hint_y=None, height=dp(30)))
         icerik.add_widget(etiket(t('difficulty'), boyut=12, renk=(0.6, 0.6, 0.6, 1),
                                  size_hint_y=None, height=dp(20)))
-        pop = Popup(title=t('solo_title'), content=icerik, size_hint=(0.9, None),
-                    height=dp(430), title_color=(1, 1, 1, 1), separator_color=MOR)
         for kod, etik, renk in (('kolay', t('easy'), YESIL),
                                 ('orta', t('medium'), SARI),
                                 ('zor', t('hard'), KIRMIZI)):
@@ -517,6 +532,7 @@ class OyunEkrani(Screen):
     def __init__(self, **kw):
         super().__init__(**kw)
         self._benim_no = 1
+        self._hotseat = False
 
         kok = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(10))
         kart(kok, renk=KOYU)
@@ -630,6 +646,11 @@ class OyunEkrani(Screen):
         self.p2_kutu.size_hint_x = 0.001 if aktif else 1
         self.p2_kutu.opacity = 0 if aktif else 1
 
+    def hotseat_mode(self, aktif):
+        """İki kişi — tek telefon (elden ele): giriş her turda açık kalır,
+        sıradaki oyuncunun adı gösterilir."""
+        self._hotseat = aktif
+
     def _gonder(self):
         kelime = self.giris.text.strip().lower()
         self.giris.text = ''
@@ -683,7 +704,16 @@ class OyunEkrani(Screen):
         self._kart_vurgu(self.p1_kutu, sira == 1, YESIL)
         self._kart_vurgu(self.p2_kutu, sira == 2, MAVI)
 
-        if benim_sira:
+        if self._hotseat:
+            # Elden ele: telefon iki oyuncunun elinde — giriş hep açık,
+            # sıradaki oyuncunun adı kendi rengiyle gösterilir.
+            ad = oyuncular.get(str(sira), f"{t('player')} {sira}")
+            self.tur_lbl.text = t('turn_of', name=ad)
+            self.tur_lbl.color = YESIL if sira == 1 else MAVI
+            self.giris.disabled = False
+            self.gonder_btn.disabled = False
+            self.gonder_btn.opacity = 1
+        elif benim_sira:
             self.tur_lbl.text = t('your_turn')
             self.tur_lbl.color = YESIL
             self.giris.disabled = False
@@ -788,7 +818,12 @@ class SonucEkrani(Screen):
         kazanan = d.get('kazanan')
         ayrilan = d.get('ayrilan_ad')
 
-        if ayrilan:
+        if d.get('mod') == 'hotseat' and kazanan not in (0, None):
+            # Elden ele: "sen kazandın" yerine kazananın adı gösterilir.
+            ad = d.get('oyuncular', {}).get(str(kazanan), f"{t('player')} {kazanan}")
+            yazi = t('won_name', name=ad)
+            renk = YESIL if kazanan == 1 else MAVI
+        elif ayrilan:
             # Rakip oyundan ayrıldı -> ayrılan kaybeder, kalan oyuncu kazanır.
             yazi, renk = t('you_won'), YESIL
         elif kazanan == 0 or kazanan is None:
@@ -1118,19 +1153,22 @@ class OfflineMotor:
     sözlüklerini app._mesaj_geldi'ye besler — böylece tüm oyun/sonuç ekranı
     kodu aynen yeniden kullanılır. İnternet/sunucu gerektirmez.
     """
-    def __init__(self, app, oda, bot, zorluk, training=False):
+    def __init__(self, app, oda, bot, zorluk, training=False, hotseat=False):
         self.app = app
         self.oda = oda
         self.bot = bot
         self.zorluk = zorluk
         self.training = training   # True: solo antrenman (rakip yok)
+        self.hotseat = hotseat     # True: iki kişi — tek telefon (elden ele)
         self._timer = None
         self._bot_ev = None
 
     def _yolla(self, d):
-        """Mesajı app'e iletir; antrenman modunda 'mod' bayrağı ekler."""
+        """Mesajı app'e iletir; antrenman/elden-ele modunda 'mod' bayrağı ekler."""
         if self.training:
             d = {**d, 'mod': 'training'}
+        elif self.hotseat:
+            d = {**d, 'mod': 'hotseat'}
         self.app._mesaj_geldi(d)
 
     def basla(self):
@@ -1139,21 +1177,26 @@ class OfflineMotor:
         oyun = self.app.sm.get_screen('oyun')
         oyun.benim_no_ayarla(1)
         oyun.training_mode(self.training)
+        oyun.hotseat_mode(self.hotseat)
         self._yolla({**self.oda.durum(), 'tip': 'yeni_oyun'})
         self._timer = Clock.schedule_interval(self._tik, 1)
 
     def gonder(self, kelime):
-        """İnsanın (oyuncu 1) kelime denemesi."""
+        """İnsanın kelime denemesi (elden elede: sıradaki oyuncu adına)."""
         if self.oda.bitti:
             return
-        basari, kod, puan = self.oda.kelime_oyna('human', kelime)
+        if self.hotseat:
+            pid = 'p1' if self.oda.siradaki_no == 1 else 'p2'
+        else:
+            pid = 'human'
+        basari, kod, puan = self.oda.kelime_oyna(pid, kelime)
         self._yolla({'tip': 'kelime_sonuc', 'basari': basari,
                      'kod': kod, 'puan': puan, 'harf': self.oda.gerekli_harf})
         if basari:
             if self.training:
                 self.oda.siradaki_no = 1   # solo: sıra hep sende kalır
             self._yolla({**self.oda.durum(), 'tip': 'durum'})
-            if not self.training and not self.oda.bitti and self.oda.siradaki_no == 2:
+            if self.bot and not self.oda.bitti and self.oda.siradaki_no == 2:
                 self._bot_planla()
 
     def _bot_planla(self):
@@ -1193,6 +1236,7 @@ class OfflineMotor:
         oyun = self.app.sm.get_screen('oyun')
         oyun.benim_no_ayarla(1)
         oyun.training_mode(self.training)
+        oyun.hotseat_mode(self.hotseat)
         self._yolla({**self.oda.durum(), 'tip': 'yeni_oyun'})
         self._timer = Clock.schedule_interval(self._tik, 1)
 
@@ -1309,6 +1353,20 @@ class WordChainOnlineApp(App):
         self.sm.get_screen('oyun').sohbet_goster(False)   # offline: sohbet yok
         self.offline.basla()
 
+    # ── Offline: İki kişi — tek telefon (elden ele) ──────────────────────────
+    def iki_kisi_basla(self, ad2):
+        from game_logic import GameRoom   # lazy: sözlük ilk burada yüklenir
+        baglan = self.sm.get_screen('baglan')
+        ad1 = baglan._ad() or t('player')
+        ad2 = (ad2 or '').strip() or f"{t('player')} 2"
+        oda = GameRoom('LOCAL', toplam_sure=baglan._secili_sure, hamle_sure=20,
+                       dict_lang=self.ayar['dict_lang'])
+        oda.oyuncu_ekle('p1', ad1)
+        oda.oyuncu_ekle('p2', ad2)
+        self.offline = OfflineMotor(self, oda, None, None, hotseat=True)
+        self.sm.get_screen('oyun').sohbet_goster(False)   # offline: sohbet yok
+        self.offline.basla()
+
     # ── Offline: Antrenman (solo) ────────────────────────────────────────────
     def training_basla(self):
         from game_logic import GameRoom   # lazy
@@ -1335,7 +1393,7 @@ class WordChainOnlineApp(App):
 
     def _oyun_bitti_ses(self, d):
         """Oyun sonucu sesini çalar (kazandın -> win, kaybettin -> lose)."""
-        if d.get('mod') == 'training' or d.get('ayrilan_ad'):
+        if d.get('mod') in ('training', 'hotseat') or d.get('ayrilan_ad'):
             self.sesler.cal('win')
             return
         kz = d.get('kazanan')
@@ -1350,6 +1408,8 @@ class WordChainOnlineApp(App):
             return
         self._oyun_kayitli = True
         self._oyun_bitti_ses(d)
+        if d.get('mod') == 'hotseat':
+            return   # elden ele: iki oyuncu da yerel — kişisel istatistik tutulmaz
         st = self.istatistik()
         zincir = d.get('zincir', [])
         benim = [z for z in zincir if z.get('no') == self._benim_no]
@@ -1377,6 +1437,7 @@ class WordChainOnlineApp(App):
         self._sohbet_sifirla()   # yeni oda: önceki oyunun mesajları taşınmasın
         self.sm.get_screen('oyun').sohbet_goster(True)
         self.sm.get_screen('oyun').training_mode(False)   # online: rakip görünür
+        self.sm.get_screen('oyun').hotseat_mode(False)
         self._oda_kodu = oda_kodu
         self.net.baglan(oda_kodu, ad)
         self.sm.get_screen('lobi').kodu_ayarla(oda_kodu)
