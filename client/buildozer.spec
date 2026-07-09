@@ -13,7 +13,7 @@ source.include_exts = py,png,jpg,kv,atlas,ttf,txt,wav
 icon.filename = %(source.dir)s/icon.png
 
 # Sürüm — Play'e her yüklemede artır (versionCode buradan üretilir)
-version = 1.1
+version = 1.2
 
 # Release çıktısı AAB (Google Play yeni uygulamalar için AAB ister, APK değil).
 android.release_artifact = aab

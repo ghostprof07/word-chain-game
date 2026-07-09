@@ -556,7 +556,10 @@ class OyunEkrani(Screen):
         kok = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(10))
         kart(kok, renk=KOYU)
 
-        ust = BoxLayout(size_hint_y=None, height=dp(38))
+        # Üst butonlar durum çubuğunun (saat/pil) altında kalmasın — bazı
+        # cihazlarda pencere çentik alanına taşıyor, basılamıyordu.
+        kok.add_widget(Label(size_hint_y=None, height=dp(26)))
+        ust = BoxLayout(size_hint_y=None, height=dp(44))
         self.toplam_lbl = etiket('05:00', boyut=20, kalin=True,
                                  renk=(0.5, 0.5, 0.5, 1), hizala='left')
         self.kelime_lbl = etiket(t('words_count', n=0), boyut=12,
@@ -756,46 +759,7 @@ class OyunEkrani(Screen):
             RoundedRectangle(pos=kutu.pos, size=kutu.size, radius=[dp(12)])
 
     def _kelime_listesi(self):
-        """Oynanan tüm kelimeleri (kim, kaç puan) kaydırılabilir popup'ta gösterir."""
-        icerik = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(10))
-        scroll = ScrollView()
-        kutu = BoxLayout(orientation='vertical', size_hint_y=None,
-                         spacing=dp(4), padding=[0, dp(4)])
-        kutu.bind(minimum_height=kutu.setter('height'))
-        scroll.add_widget(kutu)
-        icerik.add_widget(scroll)
-
-        zincir = self._zincir_son
-        if zincir:
-            kutu.add_widget(etiket(t('tap_for_meaning'), boyut=10,
-                                   renk=(0.45, 0.4, 0.55, 1), hizala='left',
-                                   size_hint_y=None, height=dp(16)))
-        else:
-            kutu.add_widget(Label(text=t('no_words_yet'), font_size=dp(14),
-                                  color=(0.5, 0.5, 0.5, 1),
-                                  size_hint_y=None, height=dp(30)))
-        for i, oge in enumerate(zincir, start=1):
-            renk = YESIL if oge.get('no') == 1 else MAVI
-            kelime = oge.get('kelime', '')
-            satir = BoxLayout(size_hint_y=None, height=dp(30))
-            sol = AnlamLabel(text=f"{i}. [ref={kelime}]{kelime}[/ref]",
-                             markup=True, font_size=dp(16),
-                             bold=True, color=renk, halign='left', valign='middle')
-            sol.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
-            sag = Label(text=f"+{oge.get('puan', 0)}", font_size=dp(14),
-                        color=(0.7, 0.7, 0.7, 1), size_hint_x=None, width=dp(52),
-                        halign='right', valign='middle')
-            sag.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
-            satir.add_widget(sol)
-            satir.add_widget(sag)
-            kutu.add_widget(satir)
-
-        pop = Popup(title=f"{t('words_used')} ({len(zincir)})", content=icerik,
-                    size_hint=(0.92, 0.8), title_color=(1, 1, 1, 1),
-                    separator_color=MOR)
-        pop.open()
-        # En son oynanan kelime altta — oraya kaydır
-        Clock.schedule_once(lambda dt: setattr(scroll, 'scroll_y', 0), 0.1)
+        App.get_running_app().kelime_listesi_ac(self._zincir_son)
 
     def _zincir_guncelle(self, zincir):
         self._zincir_son = zincir
@@ -897,16 +861,13 @@ class SonucEkrani(Screen):
             istat.add_widget(k)
         self._kok.add_widget(istat)
 
-        self._kok.add_widget(etiket(f"{t('words_used')} — {t('tap_for_meaning')}",
-                                    boyut=12, renk=(0.5, 0.5, 0.5, 1),
-                                    size_hint_y=None, height=dp(18)))
-        kelimeler = d.get('kullanilan', [])
-        kelime_lbl = etiket(
-            '  '.join(f'[ref={w}]{w}[/ref]' for w in kelimeler) if kelimeler else '—',
-            boyut=13, renk=(0.7, 0.7, 0.7, 1), markup=True)
-        kelime_lbl.bind(on_ref_press=lambda _inst, ref:
-                        App.get_running_app().anlam_ac(ref))
-        self._kok.add_widget(kelime_lbl)
+        zincir = d.get('zincir', [])
+        kl_btn = buton(f"{t('words_used')} ({len(zincir)})", renk_bg=MOR, boyut=14,
+                       callback=lambda *_:
+                       App.get_running_app().kelime_listesi_ac(zincir))
+        kl_btn.size_hint_y = None
+        kl_btn.height = dp(46)
+        self._kok.add_widget(kl_btn)
 
         self._rematch_durum = etiket('', boyut=13, kalin=True, renk=SARI,
                                      size_hint_y=None, height=dp(24))
@@ -950,11 +911,13 @@ class SonucEkrani(Screen):
                                     renk=SARI, size_hint_y=None, height=dp(30)))
 
         self._kok.add_widget(Label(size_hint_y=None, height=dp(10)))
-        self._kok.add_widget(etiket(t('words_used'), boyut=12, renk=(0.5, 0.5, 0.5, 1),
-                                    size_hint_y=None, height=dp(18)))
-        kelimeler = d.get('kullanilan', [])
-        self._kok.add_widget(etiket('  '.join(kelimeler) if kelimeler else '—',
-                                    boyut=13, renk=(0.7, 0.7, 0.7, 1)))
+        zincir = d.get('zincir', [])
+        kl_btn = buton(f"{t('words_used')} ({len(zincir)})", renk_bg=MOR, boyut=14,
+                       callback=lambda *_:
+                       App.get_running_app().kelime_listesi_ac(zincir))
+        kl_btn.size_hint_y = None
+        kl_btn.height = dp(46)
+        self._kok.add_widget(kl_btn)
 
         self._kok.add_widget(Label())
         self._rematch_btn = gradyan_buton(t('play_again'),
@@ -1403,6 +1366,49 @@ class WordChainOnlineApp(App):
         Popup(title=f"{t('all_words')} — {SOZLUK_DILLERI.get(dil, dil)}",
               content=icerik, size_hint=(0.94, 0.9),
               title_color=(1, 1, 1, 1), separator_color=MAVI).open()
+
+    def kelime_listesi_ac(self, zincir):
+        """Oynanan tüm kelimeleri (kim, kaç puan) kaydırılabilir popup'ta
+        gösterir — oyun içinden ve sonuç ekranından açılır."""
+        zincir = zincir or []
+        icerik = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(10))
+        scroll = ScrollView()
+        kutu = BoxLayout(orientation='vertical', size_hint_y=None,
+                         spacing=dp(4), padding=[0, dp(4)])
+        kutu.bind(minimum_height=kutu.setter('height'))
+        scroll.add_widget(kutu)
+        icerik.add_widget(scroll)
+
+        if zincir:
+            kutu.add_widget(etiket(t('tap_for_meaning'), boyut=10,
+                                   renk=(0.45, 0.4, 0.55, 1), hizala='left',
+                                   size_hint_y=None, height=dp(16)))
+        else:
+            kutu.add_widget(Label(text=t('no_words_yet'), font_size=dp(14),
+                                  color=(0.5, 0.5, 0.5, 1),
+                                  size_hint_y=None, height=dp(30)))
+        for i, oge in enumerate(zincir, start=1):
+            renk = YESIL if oge.get('no') == 1 else MAVI
+            kelime = oge.get('kelime', '')
+            satir = BoxLayout(size_hint_y=None, height=dp(30))
+            sol = AnlamLabel(text=f"{i}. [ref={kelime}]{kelime}[/ref]",
+                             markup=True, font_size=dp(16),
+                             bold=True, color=renk, halign='left', valign='middle')
+            sol.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
+            sag = Label(text=f"+{oge.get('puan', 0)}", font_size=dp(14),
+                        color=(0.7, 0.7, 0.7, 1), size_hint_x=None, width=dp(52),
+                        halign='right', valign='middle')
+            sag.bind(size=lambda inst, *_: setattr(inst, 'text_size', inst.size))
+            satir.add_widget(sol)
+            satir.add_widget(sag)
+            kutu.add_widget(satir)
+
+        pop = Popup(title=f"{t('words_used')} ({len(zincir)})", content=icerik,
+                    size_hint=(0.92, 0.8), title_color=(1, 1, 1, 1),
+                    separator_color=MOR)
+        pop.open()
+        # En son oynanan kelime altta — oraya kaydır
+        Clock.schedule_once(lambda dt: setattr(scroll, 'scroll_y', 0), 0.1)
 
     # ── Kelime anlamı ────────────────────────────────────────────────────────
     def anlam_ac(self, kelime):
