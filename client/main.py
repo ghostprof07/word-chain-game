@@ -1347,12 +1347,14 @@ class WordChainOnlineApp(App):
                                  size_hint_y=None, height=dp(16)))
 
         rv = RecycleView(do_scroll_x=False, bar_width=dp(4))
-        rv.viewclass = 'AnlamLabel'
         yerlesim = RecycleBoxLayout(orientation='vertical', size_hint_y=None,
                                     default_size=(None, dp(30)),
                                     default_size_hint=(1, None))
         yerlesim.bind(minimum_height=yerlesim.setter('height'))
         rv.add_widget(yerlesim)
+        # DİKKAT: viewclass, layout yöneticisi eklendikten SONRA atanmalı —
+        # önce atanırsa Kivy ataması sessizce düşürür ve liste BOŞ görünür.
+        rv.viewclass = 'AnlamLabel'
         icerik.add_widget(rv)
 
         def _goster(liste):
