@@ -383,6 +383,12 @@ class BaglanEkrani(Screen):
         icerik = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(16))
         pop = Popup(title=t('solo_title'), content=icerik, size_hint=(0.9, None),
                     height=dp(580), title_color=(1, 1, 1, 1), separator_color=MOR)
+        # 2. oyuncu isim kutusu ekranın üst yarısında — 'pan' kaydırması onu
+        # ekran dışına çıkarmasın (bkz. sozluk_ac'taki aynı önlem).
+        onceki_mod = Window.softinput_mode
+        Window.softinput_mode = ''
+        pop.bind(on_dismiss=lambda *_: setattr(Window, 'softinput_mode',
+                                               onceki_mod))
 
         # ── İki kişi — tek telefon (elden ele) ──
         icerik.add_widget(etiket(t('pass_and_play'), boyut=15, kalin=True, renk=TURUNCU,
@@ -1363,9 +1369,17 @@ class WordChainOnlineApp(App):
         ara.bind(text=_filtrele)
         _goster(kelimeler)
 
-        Popup(title=f"{t('all_words')} — {SOZLUK_DILLERI.get(dil, dil)}",
-              content=icerik, size_hint=(0.94, 0.9),
-              title_color=(1, 1, 1, 1), separator_color=MAVI).open()
+        # Arama kutusu ekranın ÜSTÜNDE: 'pan' modu klavye açılınca pencereyi
+        # yukarı kaydırıp kutuyu ekran dışına çıkarıyordu (yazı görünmüyordu).
+        # Popup açıkken kaydırmayı kapat, kapanınca eski moda dön.
+        onceki_mod = Window.softinput_mode
+        Window.softinput_mode = ''
+        pop = Popup(title=f"{t('all_words')} — {SOZLUK_DILLERI.get(dil, dil)}",
+                    content=icerik, size_hint=(0.94, 0.9),
+                    title_color=(1, 1, 1, 1), separator_color=MAVI)
+        pop.bind(on_dismiss=lambda *_: setattr(Window, 'softinput_mode',
+                                               onceki_mod))
+        pop.open()
 
     def kelime_listesi_ac(self, zincir):
         """Oynanan tüm kelimeleri (kim, kaç puan) kaydırılabilir popup'ta
