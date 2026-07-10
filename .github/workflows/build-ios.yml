@@ -26,7 +26,9 @@ jobs:
       - name: kivy-ios kur
         run: |
           python -m pip install --upgrade pip
-          pip install kivy-ios
+          # cython'u kivy-ios kurmuyor ama kivy derlemesi için zorunlu
+          # (kivy 2.3.x cython 3.0.x ile derleniyor, 3.1 henüz desteklenmiyor)
+          pip install kivy-ios "cython<3.1"
 
       # dist/ (derlenen kütüphaneler + state.db) ve .cache (indirmeler)
       # saklanınca sonraki derlemeler dakikalara iner. Anahtar bozulursa
