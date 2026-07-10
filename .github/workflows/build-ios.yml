@@ -1,0 +1,79 @@
+name: iOS IPA Derle (imzasiz)
+
+# iOS derlemesi yalnızca macOS'ta yapılabilir → GitHub'ın macOS runner'ı.
+# Çıktı İMZASIZ .ipa — App Store'a gitmez ama Sideloadly/AltStore ile
+# (ücretsiz Apple ID, 7 günlük sertifika) telefona kurulabilir.
+# Derleme uzun (~60-90 dk ilk sefer) olduğu için sadece elle tetiklenir.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sistem bağımlılıkları (autotools)
+        run: brew install autoconf automake libtool pkg-config
+
+      - name: kivy-ios kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install kivy-ios
+
+      # dist/ (derlenen kütüphaneler + state.db) ve .cache (indirmeler)
+      # saklanınca sonraki derlemeler dakikalara iner. Anahtar bozulursa
+      # (örn. kivy-ios sürüm atlaması) v2 yapıp temiz derleme al.
+      - name: Derleme önbelleği
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            .cache
+          key: kivy-ios-dist-v1-${{ runner.os }}
+
+      # kivy hedefi bağımlılık zincirini de derler:
+      # hostpython3, libffi, openssl (wss için şart), python3, sdl2 ailesi.
+      - name: Kivy + Python'u iOS için derle
+        run: toolchain build kivy
+
+      # Saf-Python bağımlılıklar. --no-binary ŞART: pip aksi halde macOS
+      # wheel'i (derlenmiş .so içeren, örn. charset-normalizer) indirebilir,
+      # o da iPhone'da import hatası verir.
+      - name: Python paketlerini kur
+        run: toolchain pip install --no-binary :all: certifi idna urllib3 charset-normalizer requests websocket-client
+
+      # client/ içeriği (main.py, words_*.txt, sounds/) uygulama paketine
+      # aynen kopyalanır → lexicoil-ios/lexicoil.xcodeproj oluşur.
+      - name: Xcode projesi oluştur
+        run: toolchain create Lexicoil client
+
+      - name: İmzasız derle
+        run: |
+          xcodebuild -project lexicoil-ios/lexicoil.xcodeproj \
+            -configuration Release -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: IPA paketle
+        run: |
+          set -e
+          APP=$(find lexicoil-ios -name '*.app' -type d -path '*Release-iphoneos*' | head -1)
+          echo "Bulunan app: $APP"
+          mkdir -p Payload
+          cp -r "$APP" Payload/
+          zip -qr lexicoil-unsigned.ipa Payload
+          ls -lh lexicoil-unsigned.ipa
+
+      - name: IPA'yı yükle (indirilebilir çıktı)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lexicoil-ipa
+          path: lexicoil-unsigned.ipa
