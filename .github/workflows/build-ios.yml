@@ -48,7 +48,8 @@ jobs:
       # wheel'i (derlenmiş .so içeren, örn. charset-normalizer) indirebilir,
       # o da iPhone'da import hatası verir.
       - name: Python paketlerini kur
-        run: toolchain pip install --no-binary :all: certifi idna urllib3 charset-normalizer requests websocket-client
+        run: |
+          toolchain pip install --no-binary :all: certifi idna urllib3 charset-normalizer requests websocket-client
 
       # client/ içeriği (main.py, words_*.txt, sounds/) uygulama paketine
       # aynen kopyalanır → lexicoil-ios/lexicoil.xcodeproj oluşur.
