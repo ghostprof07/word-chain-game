@@ -46,7 +46,7 @@ jobs:
           mv $SDK/cmdline-tools/cmdline-tools $SDK/cmdline-tools/latest
           SDKMGR=$SDK/cmdline-tools/latest/bin/sdkmanager
           yes | $SDKMGR --sdk_root=$SDK --licenses >/dev/null 2>&1 || true
-          $SDKMGR --sdk_root=$SDK "platform-tools" "build-tools;35.0.0" "platforms;android-35" "cmdline-tools;latest"
+          $SDKMGR --sdk_root=$SDK "platform-tools" "build-tools;36.0.0" "platforms;android-36" "cmdline-tools;latest"
           yes | $SDKMGR --sdk_root=$SDK --licenses >/dev/null 2>&1 || true
           mkdir -p $SDK/tools/bin
           ln -sf $SDK/cmdline-tools/latest/bin/sdkmanager $SDK/tools/bin/sdkmanager
