@@ -15,10 +15,13 @@ import json
 import random
 import string
 import uuid
+from collections import deque
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+import moderation
 from game_logic import GameRoom
 
 app = FastAPI(title="Word Chain Online")
@@ -27,6 +30,10 @@ app = FastAPI(title="Word Chain Online")
 ODALAR: dict[str, GameRoom] = {}
 # Bağlantılar: oda_kodu -> {player_id -> WebSocket}
 BAGLANTILAR: dict[str, dict[str, WebSocket]] = {}
+# Son sohbet mesajları: oda_kodu -> deque — RAPOR geldiğinde şikayetin bağlamını
+# (son konuşma) log'a yazabilmek için tutulur. Kalıcı saklanmaz, oda kapanınca
+# silinir (bkz. gizlilik politikası).
+SOHBET_GECMISI: dict[str, deque] = {}
 
 
 def yeni_oda_kodu() -> str:
@@ -154,12 +161,42 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
                 metin = (veri.get('mesaj') or '').strip()[:200]
                 if metin and player_id in oda.oyuncular:
                     p = oda.oyuncular[player_id]
+                    # UGC süzgeci: küfür/hakaret maskelenir (App Store 1.2 /
+                    # Play UGC politikası). Süzülen mesajlar log'a düşer.
+                    metin, suzuldu = moderation.temizle(metin)
+                    if suzuldu:
+                        print(f"[MODERASYON] oda={oda_kodu} oyuncu={p['ad']!r} "
+                              f"mesaj süzüldü", flush=True)
+                    SOHBET_GECMISI.setdefault(
+                        oda_kodu, deque(maxlen=30)).append(f"{p['ad']}: {metin}")
                     await odaya_yayinla(oda_kodu, {
                         'tip': 'sohbet',
                         'no': p['no'],
                         'ad': p['ad'],
                         'mesaj': metin,
                     })
+
+            elif tip == 'rapor':
+                # Kullanıcı rakibi şikayet etti. Şikayet, bağlamıyla (son
+                # sohbet) birlikte sunucu log'una yazılır; log Render
+                # panelinden izlenir ve destek adresine gelen başvurularla
+                # eşleştirilir.
+                if player_id in oda.oyuncular:
+                    sikayetci = oda.oyuncular[player_id]
+                    sikayet_edilen = next(
+                        (o['ad'] for pid, o in oda.oyuncular.items()
+                         if pid != player_id), '?')
+                    kayit = {
+                        'zaman': datetime.now(timezone.utc).isoformat(),
+                        'oda': oda_kodu,
+                        'sikayetci': sikayetci['ad'],
+                        'sikayet_edilen': sikayet_edilen,
+                        'sebep': (veri.get('sebep') or '')[:100],
+                        'sohbet': list(SOHBET_GECMISI.get(oda_kodu, [])),
+                    }
+                    print(f"[RAPOR] {json.dumps(kayit, ensure_ascii=False)}",
+                          flush=True)
+                    await websocket.send_text(json.dumps({'tip': 'rapor_alindi'}))
 
             elif tip == 'rematch':
                 yeni_basladi = oda.rematch_iste(player_id)
@@ -186,7 +223,8 @@ async def ws_oda(websocket: WebSocket, oda_kodu: str, ad: str = "Oyuncu"):
             **oda.durum(),
             'tip': 'oyuncu_ayrildi',
         })
-        # Oda boşaldıysa sil
+        # Oda boşaldıysa sil (sohbet geçmişi de silinir — saklanmaz)
         if not BAGLANTILAR.get(oda_kodu):
             ODALAR.pop(oda_kodu, None)
             BAGLANTILAR.pop(oda_kodu, None)
+            SOHBET_GECMISI.pop(oda_kodu, None)
