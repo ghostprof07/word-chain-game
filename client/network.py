@@ -139,6 +139,16 @@ class NetworkClient:
             except Exception:
                 pass
 
+    # ── Rakibi şikayet etme ───────────────────────────────────────────────────
+    def rapor_gonder(self, sebep=''):
+        """Rakibi sunucuya şikayet eder (uygunsuz davranış bildirimi).
+        Sunucu şikayeti son konuşmayla birlikte kaydeder."""
+        if self.ws and self.bagli:
+            try:
+                self.ws.send(json.dumps({'tip': 'rapor', 'sebep': sebep}))
+            except Exception:
+                pass
+
     def kapat(self):
         if self.ws:
             try:

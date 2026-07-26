@@ -26,10 +26,13 @@ if platform not in ('android', 'ios'):
     from kivy.config import Config
     Config.set('graphics', 'width', os.environ.get('WC_W', '400'))
     Config.set('graphics', 'height', os.environ.get('WC_H', '720'))
-    if os.environ.get('WC_LEFT'):
-        Config.set('graphics', 'left', os.environ['WC_LEFT'])
-    if os.environ.get('WC_TOP'):
-        Config.set('graphics', 'top', os.environ['WC_TOP'])
+    # Pencere konumu (iki oyuncuyu yan yana açmak için). Kivy 'left'/'top'
+    # ayarlarını YALNIZCA position='custom' iken uygular — bu satır olmadan
+    # pencereler ortalanır ve iki istemci üst üste açılırdı.
+    if os.environ.get('WC_LEFT') or os.environ.get('WC_TOP'):
+        Config.set('graphics', 'position', 'custom')
+        Config.set('graphics', 'left', os.environ.get('WC_LEFT', '0'))
+        Config.set('graphics', 'top', os.environ.get('WC_TOP', '0'))
 
 from kivy.animation import Animation
 from kivy.app import App
@@ -1259,7 +1262,12 @@ class WordChainOnlineApp(App):
         self._sohbet = []
         self._sohbet_popup = None
         self._sohbet_kutu = None
+        self._engelle_btn = None
         self._okunmamis = 0
+        # Rakip engellendi mi — engelliyken mesajları gösterilmez. Oda bazlıdır
+        # (takma adlar hesap olmadığından kalıcı engel anlamsız olurdu).
+        self._engelli = False
+        self._raporlandi = False   # aynı oyunda tekrar tekrar şikayet edilmesin
         self.offline = None   # offline (bota karşı/antrenman) motoru; yoksa online
         self._oyun_kayitli = False   # bu oyun istatistiğe kaydedildi mi (tek sefer)
         self.sesler = Sesler()
@@ -1318,7 +1326,10 @@ class WordChainOnlineApp(App):
         """Nasıl Oynanır / SSS — kural ve kabul edilen kelime açıklaması."""
         icerik = BoxLayout(orientation='vertical', padding=dp(12))
         scroll = ScrollView(do_scroll_x=False)
-        lbl = Label(text=t('faq_text'), markup=True, font_size=dp(14),
+        # İletişim adresi SSS'in sonuna eklenir — App Store Kural 1.2 sohbet
+        # içeren uygulamalarda yayıncıya ulaşılabilir bir adres şart koşuyor.
+        lbl = Label(text=t('faq_text') + '\n\n[b]' + t('contact') + '[/b]',
+                    markup=True, font_size=dp(14),
                     color=(0.9, 0.9, 0.9, 1), size_hint_y=None,
                     halign='left', valign='top')
         lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
@@ -1666,6 +1677,10 @@ class WordChainOnlineApp(App):
         elif tip == 'sohbet':
             self._sohbet_geldi(veri)
 
+        elif tip == 'rapor_alindi':
+            # Sunucu şikayeti kaydetti (bilgi satırı zaten gönderirken eklendi).
+            pass
+
         elif tip == 'kelime_sonuc':
             self.sesler.cal('success' if veri['basari'] else 'error')
             self.sm.get_screen('oyun').kelime_sonuc(
@@ -1710,6 +1725,8 @@ class WordChainOnlineApp(App):
         """Chat geçmişini, okunmamış rozetini ve açık popup'ı temizler."""
         self._sohbet = []
         self._okunmamis = 0
+        self._engelli = False      # yeni oda -> yeni rakip: engel de sıfırlanır
+        self._raporlandi = False
         if self._sohbet_popup is not None:
             self._sohbet_popup.dismiss()   # on_dismiss popup/kutu referanslarını sıfırlar
         self._sohbet_rozet_guncelle()
@@ -1718,10 +1735,16 @@ class WordChainOnlineApp(App):
     def _hex(renk):
         return ''.join(f'{int(c * 255):02x}' for c in renk[:3])
 
+    def _engelli_mi(self, m):
+        """Bu mesaj engellenmiş rakipten mi geliyor?"""
+        return self._engelli and m.get('no') != self._benim_no
+
     def _sohbet_geldi(self, veri):
         m = {'no': veri.get('no'), 'ad': veri.get('ad', '?'),
              'mesaj': veri.get('mesaj', '')}
         self._sohbet.append(m)
+        if self._engelli_mi(m):
+            return          # engelli rakip: ne gösterilir ne de rozet yakılır
         if self._sohbet_popup is not None:
             self._sohbet_satir_ekle(m)
         else:
@@ -1753,6 +1776,20 @@ class WordChainOnlineApp(App):
         self._sohbet_rozet_guncelle()
 
         icerik = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(8))
+
+        # Moderasyon araçları: rakibi şikayet et / engelle (App Store 1.2 ve
+        # Play UGC politikası sohbet içeren uygulamalarda bunları zorunlu kılar).
+        arac = BoxLayout(size_hint_y=None, height=dp(34), spacing=dp(8))
+        rapor_btn = buton(t('report'), renk_bg=(0.45, 0.20, 0.20, 1), boyut=11)
+        self._engelle_btn = buton(
+            t('unblock') if self._engelli else t('block'),
+            renk_bg=(0.30, 0.30, 0.36, 1), boyut=11)
+        rapor_btn.bind(on_press=lambda *_: self._rapor_popup())
+        self._engelle_btn.bind(on_press=lambda *_: self._engel_degistir())
+        arac.add_widget(rapor_btn)
+        arac.add_widget(self._engelle_btn)
+        icerik.add_widget(arac)
+
         scroll = ScrollView()
         self._sohbet_kutu = BoxLayout(orientation='vertical', size_hint_y=None,
                                       spacing=dp(6), padding=[0, dp(4)])
@@ -1761,7 +1798,8 @@ class WordChainOnlineApp(App):
         icerik.add_widget(scroll)
 
         for m in self._sohbet:
-            self._sohbet_satir_ekle(m)
+            if not self._engelli_mi(m):
+                self._sohbet_satir_ekle(m)
 
         alt = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
         giris = giris_kutusu(t('type_message'), font_size=dp(16))
@@ -1789,10 +1827,73 @@ class WordChainOnlineApp(App):
         def _kapandi(*_):
             self._sohbet_popup = None
             self._sohbet_kutu = None
+            self._engelle_btn = None
 
         self._sohbet_popup.bind(on_dismiss=_kapandi)
         self._sohbet_popup.open()
         Clock.schedule_once(lambda dt: setattr(scroll, 'scroll_y', 0), 0.1)
+
+    # ── Moderasyon: engelle / şikayet et ─────────────────────────────────────
+    def _engel_degistir(self):
+        """Rakibi engeller ya da engeli kaldırır (bu oda boyunca geçerli)."""
+        self._engelli = not self._engelli
+        if self._engelle_btn is not None:
+            self._engelle_btn.text = t('unblock') if self._engelli else t('block')
+        # Mesaj listesini engel durumuna göre yeniden çiz
+        if self._sohbet_kutu is not None:
+            self._sohbet_kutu.clear_widgets()
+            for m in self._sohbet:
+                if not self._engelli_mi(m):
+                    self._sohbet_satir_ekle(m)
+            self._bilgi_satiri(t('blocked_notice') if self._engelli
+                               else t('unblocked_notice'))
+
+    def _bilgi_satiri(self, metin):
+        """Sohbete gri bilgi satırı ekler (engellendi/şikayet alındı gibi)."""
+        if self._sohbet_kutu is None:
+            return
+        lbl = Label(text=metin, font_size=dp(12), color=(0.6, 0.6, 0.6, 1),
+                    size_hint_y=None, halign='center', valign='top', italic=True)
+        lbl.bind(width=lambda i, w: setattr(i, 'text_size', (w, None)))
+        lbl.bind(texture_size=lambda i, ts: setattr(i, 'height', ts[1] + dp(6)))
+        self._sohbet_kutu.add_widget(lbl)
+
+    def _rapor_popup(self):
+        """Şikayet nedeni seçtirir ve sunucuya gönderir."""
+        if self._raporlandi:
+            self._bilgi_satiri(t('report_already'))
+            return
+
+        icerik = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(14))
+        icerik.add_widget(etiket(t('report_question'), boyut=14))
+
+        pop = Popup(title=t('report'), content=icerik, size_hint=(0.9, None),
+                    height=dp(330), title_color=(1, 1, 1, 1),
+                    separator_color=KIRMIZI)
+
+        def _gonder(sebep):
+            self.net.rapor_gonder(sebep)
+            self._raporlandi = True
+            # Şikayet edilen oyuncu otomatik olarak engellenir — kullanıcı
+            # şikayet ettiği kişiyle konuşmaya devam etmek zorunda kalmasın.
+            if not self._engelli:
+                self._engel_degistir()
+            self._bilgi_satiri(t('report_sent'))
+            pop.dismiss()
+
+        for anahtar in ('report_offensive', 'report_harassment', 'report_other'):
+            b = buton(t(anahtar), renk_bg=(0.45, 0.20, 0.20, 1), boyut=13)
+            b.size_hint_y = None
+            b.height = dp(46)
+            b.bind(on_press=lambda _w, a=anahtar: _gonder(a))
+            icerik.add_widget(b)
+
+        iptal = buton(t('cancel'), renk_bg=(0.30, 0.30, 0.36, 1), boyut=13)
+        iptal.size_hint_y = None
+        iptal.height = dp(42)
+        iptal.bind(on_press=lambda *_: pop.dismiss())
+        icerik.add_widget(iptal)
+        pop.open()
 
     def on_stop(self):
         self.net.kapat()
