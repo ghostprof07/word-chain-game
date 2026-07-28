@@ -41,11 +41,14 @@ jobs:
             .cache
           key: kivy-ios-sim-v1-${{ runner.os }}
 
-      # Simülatör mimarisi cihazınkinden farklı: macos-15 runner'ları Apple
-      # Silicon olduğu için simülatör de arm64 ama "iphonesimulator" SDK'sına
-      # karşı derlenir.
+      # Simülatör ayrı bir platform: cihaz "iphoneos", simülatör
+      # "iphonesimulator" SDK'sına karşı derlenir. (toolchain'in bayrağı
+      # --arch DEĞİL --platform; yanlışı CI yakaladı.)
       - name: Kivy'yi simülatör için derle
-        run: toolchain build kivy --arch arm64-simulator
+        run: |
+          echo "--- toolchain build secenekleri ---"
+          toolchain build --help || true
+          toolchain build kivy --platform iphonesimulator
 
       - name: Python paketlerini kur
         run: |
