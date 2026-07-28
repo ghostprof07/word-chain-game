@@ -105,30 +105,50 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
 
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch --console-pty "$UDID" "$BUNDLE" > launch.log 2>&1 &
-          LAUNCH_PID=$!
+
+          # Uygulamanın kendi çıktısını yakala (Python hataları buradan görünür).
+          # NOT: 'launch --console-pty' arka plana atılıp yönlendirilince pty
+          # bulamayıp sessizce ölüyor ve uygulama hiç başlamıyordu — bu yüzden
+          # log akışı AYRI bir süreçte, launch ise ÖN PLANDA çalıştırılıyor.
+          xcrun simctl spawn "$UDID" log stream --level debug \
+            --predicate 'senderImagePath CONTAINS "lexicoil" OR process == "lexicoil"' \
+            > launch.log 2>&1 &
+          LOG_PID=$!
+          sleep 3
+
+          echo "--- simctl launch ---"
+          set +e
+          xcrun simctl launch "$UDID" "$BUNDLE"
+          LAUNCH_RC=$?
+          set -e
+          echo "launch cikis kodu: $LAUNCH_RC"
 
           # Kivy'nin açılması + presplash + ilk ekran için zaman tanı
-          sleep 45
+          sleep 40
           xcrun simctl io "$UDID" screenshot acilis.png
-          sleep 20
+          sleep 25
           xcrun simctl io "$UDID" screenshot ikinci.png
+          kill $LOG_PID 2>/dev/null || true
 
-          echo "--- Uygulama çıktısı (ilk 80 satır) ---"
-          head -80 launch.log || true
+          echo "--- Uygulama ciktisi (son 120 satir) ---"
+          tail -120 launch.log || true
 
-          # Uygulama hâlâ ayakta mı? (çöktüyse süreç listesinde olmaz)
+          # Uygulama hâlâ ayakta mı?
           if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE"; then
             echo "SONUC: uygulama AYAKTA"
           else
-            echo "SONUC: uygulama calismiyor olabilir — log ve ekran goruntusune bak"
+            echo "SONUC: uygulama AYAKTA DEGIL"
           fi
 
-          # Çökme raporu varsa göster
-          CRASH=$(find ~/Library/Logs/DiagnosticReports -name '*lexicoil*' 2>/dev/null | head -1)
-          if [ -n "$CRASH" ]; then
-            echo "--- COKME RAPORU ---"; head -60 "$CRASH"
-          fi
+          # Çökme raporlarını TAM olarak dök (hem host hem simülatör yolu)
+          echo "--- COKME RAPORLARI ---"
+          for D in "$HOME/Library/Logs/DiagnosticReports" \
+                   "$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data/Library/Logs/DiagnosticReports"; do
+            find "$D" -name '*exicoil*' 2>/dev/null | while read -r C; do
+              echo "### $C"; cat "$C"
+            done
+          done
+          echo "(rapor yoksa yukarisi bostur)"
 
       - name: Ekran görüntülerini ve logu yükle
         if: always()
