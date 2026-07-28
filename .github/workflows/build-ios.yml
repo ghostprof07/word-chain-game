@@ -95,8 +95,20 @@ jobs:
             $PB -c "Set :$1 $3" "$PLIST" 2>/dev/null || \
             $PB -c "Add :$1 $2 $3" "$PLIST"
           }
-          ayarla CFBundleShortVersionString string 1.0
-          ayarla CFBundleVersion string 1
+          # Sürüm tek kaynaktan: buildozer.spec (Android ile aynı kalsın)
+          SURUM=$(grep -E '^version\s*=' client/buildozer.spec | head -1 | sed 's/.*=\s*//')
+          echo "Sürüm: $SURUM"
+          ayarla CFBundleShortVersionString string "$SURUM"
+          ayarla CFBundleVersion string "${GITHUB_RUN_NUMBER:-1}"
+
+          # Bundle kimliği — kivy-ios varsayılanı org.kivy.lexicoil bırakılamaz;
+          # Android'le aynı kimliği kullanıyoruz.
+          ayarla CFBundleIdentifier string com.kemalyavuz.lexicoil
+
+          # Asset katalogundaki ikon setinin adı. Bu anahtar olmadan modern
+          # iOS ikonu bulamaz ve App Store doğrulaması uyarı verir.
+          ayarla CFBundleIconName string AppIcon
+
           # Yalnızca https/wss kullanıyoruz; standart şifreleme -> muaf.
           # Bu bayrak olmadan her yüklemede "ihracat uyumu" sorusu sorulur.
           ayarla ITSAppUsesNonExemptEncryption bool false
