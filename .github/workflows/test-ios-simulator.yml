@@ -1,0 +1,128 @@
+name: iOS Simulator Testi (ekran goruntusu)
+
+# Cihaz OLMADAN iOS doğrulaması: uygulamayı iPhone simülatöründe açar,
+# ekran görüntüsü alır ve çökme olup olmadığını raporlar.
+#
+# Neyi doğrular: uygulama iOS'ta açılıyor mu, arayüz render ediliyor mu,
+# Python import'ları çalışıyor mu, sunucuya bağlanabiliyor mu.
+# Neyi doğrulamaz: gerçek cihaz performansı, imzalama/App Store süreci.
+#
+# NOT: Simülatör AYRI bir mimari (arm64-simulator) — cihaz derlemesinin
+# önbelleğini kullanamaz, kendi tam derlemesini yapar (ilk sefer uzun).
+on:
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sistem bağımlılıkları (autotools)
+        run: brew install autoconf automake libtool pkg-config
+
+      - name: kivy-ios kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install kivy-ios "cython<3.1"
+
+      - name: Simülatör derleme önbelleği
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            .cache
+          key: kivy-ios-sim-v1-${{ runner.os }}
+
+      # Simülatör mimarisi cihazınkinden farklı: macos-15 runner'ları Apple
+      # Silicon olduğu için simülatör de arm64 ama "iphonesimulator" SDK'sına
+      # karşı derlenir.
+      - name: Kivy'yi simülatör için derle
+        run: toolchain build kivy --arch arm64-simulator
+
+      - name: Python paketlerini kur
+        run: |
+          toolchain pip install --no-binary :all: certifi idna urllib3 charset-normalizer requests websocket-client
+
+      - name: Xcode projesi oluştur
+        run: toolchain create Lexicoil client
+
+      - name: Uygulama varlıklarını yerleştir
+        run: |
+          set -e
+          PROJ=lexicoil-ios
+          ICONSET=$(find $PROJ -type d -name 'AppIcon.appiconset' | head -1)
+          if [ -n "$ICONSET" ]; then
+            rm -rf "$ICONSET"/* && cp ios/AppIcon.appiconset/* "$ICONSET"/
+          fi
+          PLIST=$(find $PROJ -name 'Info.plist' -not -path '*/build/*' | head -1)
+          PB=/usr/libexec/PlistBuddy
+          $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          $PB -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+
+      - name: Simülatör için derle
+        run: |
+          xcodebuild -project lexicoil-ios/lexicoil.xcodeproj \
+            -scheme lexicoil -configuration Debug \
+            -sdk iphonesimulator -derivedDataPath dd \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Simülatörü başlat ve uygulamayı çalıştır
+        run: |
+          set -e
+          APP=$(find dd -name '*.app' -type d -path '*iphonesimulator*' | head -1)
+          echo "App: $APP"
+          BUNDLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          echo "Bundle id: $BUNDLE"
+
+          UDID=$(xcrun simctl create LexicoilTest \
+                 "iPhone 16" 2>/dev/null || \
+                 xcrun simctl list devices available | grep -m1 -o '[0-9A-F-]\{36\}')
+          echo "Simulator: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch --console-pty "$UDID" "$BUNDLE" > launch.log 2>&1 &
+          LAUNCH_PID=$!
+
+          # Kivy'nin açılması + presplash + ilk ekran için zaman tanı
+          sleep 45
+          xcrun simctl io "$UDID" screenshot acilis.png
+          sleep 20
+          xcrun simctl io "$UDID" screenshot ikinci.png
+
+          echo "--- Uygulama çıktısı (ilk 80 satır) ---"
+          head -80 launch.log || true
+
+          # Uygulama hâlâ ayakta mı? (çöktüyse süreç listesinde olmaz)
+          if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE"; then
+            echo "SONUC: uygulama AYAKTA"
+          else
+            echo "SONUC: uygulama calismiyor olabilir — log ve ekran goruntusune bak"
+          fi
+
+          # Çökme raporu varsa göster
+          CRASH=$(find ~/Library/Logs/DiagnosticReports -name '*lexicoil*' 2>/dev/null | head -1)
+          if [ -n "$CRASH" ]; then
+            echo "--- COKME RAPORU ---"; head -60 "$CRASH"
+          fi
+
+      - name: Ekran görüntülerini ve logu yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-sonuc
+          path: |
+            acilis.png
+            ikinci.png
+            launch.log
