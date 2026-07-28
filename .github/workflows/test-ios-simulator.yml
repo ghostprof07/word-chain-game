@@ -62,7 +62,9 @@ jobs:
           if [ -n "$ICONSET" ]; then
             rm -rf "$ICONSET"/* && cp ios/AppIcon.appiconset/* "$ICONSET"/
           fi
-          PLIST=$(find $PROJ -name 'Info.plist' -not -path '*/build/*' | head -1)
+          # kivy-ios plist'i ön ekli adlandırıyor (lexicoil-Info.plist)
+          PLIST=$(find $PROJ -name '*Info.plist' -not -path '*/build/*' | head -1)
+          echo "Info.plist: $PLIST"
           PB=/usr/libexec/PlistBuddy
           $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
           $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
