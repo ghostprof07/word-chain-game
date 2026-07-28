@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Apple Gizlilik Manifestosu (App Store 2024'ten beri zorunlu).
+  ============================================================
+  İki bölüm var:
+   1) NSPrivacyAccessedAPITypes — "gerekçe isteyen" sistem API'leri.
+      Kivy/SDL2/Python bunları dolaylı olarak kullanır (dosya zaman damgası,
+      disk alanı, açılış zamanı, UserDefaults). Gerekçe kodları Apple'ın
+      listesinden seçildi.
+   2) NSPrivacyCollectedDataTypes — dışarı GÖNDERİLEN veri. Lexicoil'de
+      yalnızca takma ad ve sohbet mesajları sunucuya iletilir (oyunun
+      çalışması için); saklanmaz, kimliğe bağlanmaz, reklam/izleme yoktur.
+      Offline modlarda hiçbir şey gönderilmez.
+  Ayrıntı: docs/privacy.html
+-->
+<plist version="1.0">
+<dict>
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- C617.1: yalnızca uygulamanın kendi oluşturduğu dosyalar -->
+                <string>C617.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- CA92.1: yalnızca uygulamanın kendi yazdığı bilgiye erişim -->
+                <string>CA92.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- E174.1: yazma başarısız olmasın diye alan kontrolü -->
+                <string>E174.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- 35F9.1: uygulama içi süre ölçümü (oyun/hamle sayacı) -->
+                <string>35F9.1</string>
+            </array>
+        </dict>
+    </array>
+
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

@@ -1506,7 +1506,14 @@ class WordChainOnlineApp(App):
 
     @staticmethod
     def _tarayici_ac(url):
-        """URL'yi cihazın tarayıcısında açar (Android'de Intent ile)."""
+        """URL'yi cihazın tarayıcısında açar.
+
+        Android : Intent (jnius)
+        iOS     : UIApplication.openURL (pyobjus) — iOS'ta `webbrowser`
+                  ÇALIŞMAZ (açacak bir tarayıcı süreci bulamaz), bu yüzden
+                  yerel API şart. pyobjus kivy-ios paketinde zaten geliyor.
+        Diğer   : webbrowser
+        """
         if platform == 'android':
             try:
                 from jnius import autoclass
@@ -1515,6 +1522,21 @@ class WordChainOnlineApp(App):
                 intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 autoclass('org.kivy.android.PythonActivity').mActivity \
                     .startActivity(intent)
+                return
+            except Exception:
+                pass
+        elif platform == 'ios':
+            try:
+                from pyobjus import autoclass, objc_str
+                NSURL = autoclass('NSURL')
+                UIApplication = autoclass('UIApplication')
+                nsurl = NSURL.URLWithString_(objc_str(url))
+                app = UIApplication.sharedApplication()
+                # iOS 10+ : openURL:options:completionHandler:
+                try:
+                    app.openURL_options_completionHandler_(nsurl, None, None)
+                except Exception:
+                    app.openURL_(nsurl)   # eski iOS için geri düşüş
                 return
             except Exception:
                 pass

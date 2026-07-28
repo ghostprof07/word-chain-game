@@ -58,6 +58,57 @@ jobs:
       - name: Xcode projesi oluştur
         run: toolchain create Lexicoil client
 
+      # kivy-ios'un ürettiği proje jenerik ikon + varsayılan Info.plist ile
+      # gelir. Burada marka ikonunu, portre kilidini, sürümü, ihracat-uyumu
+      # bayrağını ve Apple'ın gizlilik manifestosunu yerleştiriyoruz.
+      - name: Uygulama varlıklarını ve Info.plist'i yerleştir
+        run: |
+          set -e
+          PROJ=lexicoil-ios
+          echo "--- Proje içeriği ---"
+          ls -la $PROJ
+
+          # 1) İKON — mevcut asset katalogundaki AppIcon.appiconset'i değiştir
+          ICONSET=$(find $PROJ -type d -name 'AppIcon.appiconset' | head -1)
+          if [ -n "$ICONSET" ]; then
+            echo "Asset katalogu bulundu: $ICONSET"
+            rm -rf "$ICONSET"/*
+            cp ios/AppIcon.appiconset/* "$ICONSET"/
+            ls "$ICONSET" | head -5
+          else
+            echo "UYARI: AppIcon.appiconset bulunamadi — ikon atlandi."
+          fi
+
+          # 2) INFO.PLIST
+          PLIST=$(find $PROJ -name 'Info.plist' -not -path '*/build/*' | head -1)
+          echo "Info.plist: $PLIST"
+          PB=/usr/libexec/PlistBuddy
+          ayarla() {  # anahtar tip deger  (varsa Set, yoksa Add)
+            $PB -c "Set :$1 $3" "$PLIST" 2>/dev/null || \
+            $PB -c "Add :$1 $2 $3" "$PLIST"
+          }
+          ayarla CFBundleShortVersionString string 1.0
+          ayarla CFBundleVersion string 1
+          # Yalnızca https/wss kullanıyoruz; standart şifreleme -> muaf.
+          # Bu bayrak olmadan her yüklemede "ihracat uyumu" sorusu sorulur.
+          ayarla ITSAppUsesNonExemptEncryption bool false
+
+          # Portre kilidi (oyun arayüzü dikey tasarlandı)
+          $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          $PB -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          $PB -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+
+          echo "--- Info.plist son hali ---"
+          $PB -c "Print" "$PLIST" | head -40
+
+          # 3) GİZLİLİK MANİFESTOSU — dosyayı kopyala + Xcode hedefine ekle
+          APPDIR=$(dirname "$PLIST")
+          cp ios/PrivacyInfo.xcprivacy "$APPDIR"/
+          python -m pbxproj file "$PROJ/lexicoil.xcodeproj" \
+            "$(basename $APPDIR)/PrivacyInfo.xcprivacy" --target lexicoil \
+            || echo "UYARI: PrivacyInfo projeye eklenemedi (derleme sürüyor)."
+
       - name: İmzasız derle
         run: |
           xcodebuild -project lexicoil-ios/lexicoil.xcodeproj \
