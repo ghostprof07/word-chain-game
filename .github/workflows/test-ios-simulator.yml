@@ -39,16 +39,20 @@ jobs:
           path: |
             dist
             .cache
-          key: kivy-ios-sim-v1-${{ runner.os }}
+          key: kivy-ios-sim-v2-${{ runner.os }}
+          # Cihaz derlemesinin önbelleğinden sıcak başlangıç (hostpython gibi
+          # platformdan bağımsız parçalar yeniden derlenmesin)
+          restore-keys: |
+            kivy-ios-dist-v1-${{ runner.os }}
 
       # Simülatör ayrı bir platform: cihaz "iphoneos", simülatör
       # "iphonesimulator" SDK'sına karşı derlenir. (toolchain'in bayrağı
       # --arch DEĞİL --platform; yanlışı CI yakaladı.)
+      # Geçerli platform adları "{sdk}-{mimari}" biçiminde:
+      #   iphoneos-arm64 | iphonesimulator-arm64 | iphonesimulator-x86_64
+      # macos-15 runner'ları Apple Silicon → simülatör de arm64.
       - name: Kivy'yi simülatör için derle
-        run: |
-          echo "--- toolchain build secenekleri ---"
-          toolchain build --help || true
-          toolchain build kivy --platform iphonesimulator
+        run: toolchain build kivy --platform iphonesimulator-arm64
 
       - name: Python paketlerini kur
         run: |
