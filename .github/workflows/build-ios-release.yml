@@ -112,6 +112,11 @@ jobs:
           # iPad'de (uyumluluk modunda da) Split View'a girmesin; portre
           # kilitli uygulamalar için App Store doğrulaması bunu ister.
           ayarla UIRequiresFullScreen bool true
+          # Kivy'nin kamera/ses sağlayıcıları bu API'lere referans veriyor;
+          # App Store işleme aşamasında (ITMS-90683) açıklama metni zorunlu.
+          # Uygulama bu izinleri hiçbir zaman istemez.
+          ayarla NSCameraUsageDescription string "Lexicoil does not use the camera. This entry is required by a bundled library; the app never requests camera access."
+          ayarla NSMicrophoneUsageDescription string "Lexicoil does not use the microphone. This entry is required by a bundled library; the app never requests microphone access."
 
           $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
           $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
