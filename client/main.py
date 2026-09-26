@@ -150,7 +150,20 @@ def giris_kutusu(hint, **kw):
                    hint_text=hint, hint_text_color=(0.45, 0.4, 0.55, 1),
                    background_color=GENC, foreground_color=(1, 1, 1, 1),
                    cursor_color=PEMBE, padding=[dp(14), dp(12)], **kw)
+    ti.bind(focus=_klavye_modu_sec)
     return ti
+
+
+def _klavye_modu_sec(ti, odakta):
+    """Klavye açılırken pencere davranışını kutunun konumuna göre seçer.
+    'pan' tüm pencereyi klavye yüksekliği kadar kaydırır: alttaki kutular için
+    iyi (oyun girişi, sohbet) ama üst yarıdaki kutuları (ana ekrandaki isim,
+    sözlük araması) ekran dışına iter. Üst yarıdaki kutu zaten klavyenin
+    üstünde kaldığından onlar için kaydırma kapatılır ('')."""
+    if not odakta:
+        return
+    _, y = ti.to_window(ti.center_x, ti.center_y)
+    Window.softinput_mode = '' if y > Window.height / 2 else 'pan'
 
 
 # ── Gradyan (canlı tema) ───────────────────────────────────────────────────────
