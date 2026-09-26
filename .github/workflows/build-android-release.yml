@@ -71,6 +71,18 @@ jobs:
           P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.KEY_PASSWORD }}
         run: buildozer -v android release
 
+      # Android 16 geri tuşu opt-out'u manifest'e girmediyse geri tuşu yine
+      # uygulamayı arka plana atar (bkz. buildozer.spec) — derlemeyi durdur.
+      - name: Manifest'te geri tuşu ayarını doğrula
+        run: |
+          AAB=$(ls client/bin/*.aab | head -1)
+          unzip -p "$AAB" base/manifest/AndroidManifest.xml > /tmp/manifest.pb
+          if grep -aq enableOnBackInvokedCallback /tmp/manifest.pb; then
+            echo "OK: enableOnBackInvokedCallback manifest'te"
+          else
+            echo "HATA: enableOnBackInvokedCallback manifest'te YOK"; exit 1
+          fi
+
       - name: AAB'yi yükle (indirilebilir çıktı)
         uses: actions/upload-artifact@v4
         with:

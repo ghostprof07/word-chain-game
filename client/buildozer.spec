@@ -43,6 +43,12 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE
 # (Android 16) hedeflemek ZORUNLU. Bu yüzden 35→36'ya yükseltildi.
 android.api = 36
 android.minapi = 24
+# API 36 hedefleyen uygulamalarda Android 16 "predictive back"i zorunlu açıyor:
+# KEYCODE_BACK artık gönderilmiyor → Kivy geri tuşunu hiç görmüyor, sistem
+# uygulamayı arka plana atıyordu (popup/ekran geri mantığı ölüydü). Google'ın
+# geçici opt-out'u: <application android:enableOnBackInvokedCallback="false">.
+# İleride kaldırılırsa OnBackInvokedCallback (pyjnius) ile ele alınmalı.
+android.extra_manifest_application_arguments = ./android_application_attrs.xml
 # SDK lisansını otomatik kabul et (CI'da build-tools kurulumu için ŞART)
 android.accept_sdk_license = True
 # Tek mimari: derleme hızlı + neredeyse tüm modern telefonlar arm64.
