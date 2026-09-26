@@ -21,7 +21,9 @@ android.release_artifact = aab
 # ── BAĞIMLILIKLAR ─────────────────────────────────────────────────────────────
 # kivy: arayüz | websocket-client: online bağlantı | requests: oda oluşturma
 # certifi + openssl: https/wss (güvenli bağlantı) için gerekli
-requirements = python3,kivy==2.3.1,websocket-client,requests,certifi,openssl
+# charset-normalizer 3.5+ PyPI'da Android wheel'i (cp314) yayınlıyor; p4a onu seçip
+# "not a supported wheel" ile kırılıyor → saf-Python 3.4.5'e sabitlendi (2026-09).
+requirements = python3,kivy==2.3.1,websocket-client,requests,certifi,openssl,charset-normalizer==3.4.5
 
 # ── EKRAN ─────────────────────────────────────────────────────────────────────
 orientation = portrait
