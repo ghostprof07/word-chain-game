@@ -1486,23 +1486,61 @@ class WordChainOnlineApp(App):
                             if anlam:
                                 satirlar.append(anlam)
             else:   # en
-                r = requests.get('https://api.dictionaryapi.dev/api/v2/entries/en/'
-                                 + kelime, timeout=8)
-                veri = r.json()
-                if isinstance(veri, list):
-                    for giris in veri:
-                        for m in giris.get('meanings') or []:
-                            tur = m.get('partOfSpeech') or ''
-                            for tanim in m.get('definitions') or []:
-                                d = (tanim.get('definition') or '').strip()
-                                if d:
-                                    satirlar.append(f'({tur}) {d}' if tur else d)
+                satirlar = WordChainOnlineApp._anlam_en(kelime)
             if not satirlar:
                 return t('no_definition')
             satirlar = satirlar[:8]   # en fazla 8 anlam — popup taşmasın
             return '\n\n'.join(f'{i}. {s}' for i, s in enumerate(satirlar, 1))
         except Exception:
             return t('definition_error')
+
+    @staticmethod
+    def _anlam_en(kelime):
+        """İngilizce tanımlar: önce Vikisözlük (Wikimedia — güvenilir), o
+        başarısız olursa dictionaryapi.dev (2026-09'da haftalarca çöktü).
+        İkisi de erişilemezse istisna yükselir → 'definition_error'."""
+        import html
+        import re
+        import requests
+        hata = None
+        try:
+            r = requests.get('https://en.wiktionary.org/api/rest_v1/page/definition/'
+                             + kelime, timeout=6,
+                             headers={'User-Agent': 'Lexicoil (eng.kemalyavuz@gmail.com)'})
+            if r.status_code == 404:
+                return []   # Vikisözlük'te yok — bulunamadı say
+            r.raise_for_status()
+            satirlar = []
+            for giris in r.json().get('en') or []:
+                tur = (giris.get('partOfSpeech') or '').lower()
+                if tur == 'symbol':   # "ISO 639 dil kodu" gibi — oyuncuya anlamsız
+                    continue
+                for tanim in giris.get('definitions') or []:
+                    d = tanim.get('definition') or ''
+                    d = re.sub(r'<style.*?</style>', '', d, flags=re.S)   # gömülü CSS
+                    d = html.unescape(re.sub(r'<[^>]+>', '', d))
+                    d = ' '.join(d.split())
+                    if d:
+                        satirlar.append(f'({tur}) {d}' if tur else d)
+            return satirlar
+        except Exception as e:
+            hata = e
+        try:
+            r = requests.get('https://api.dictionaryapi.dev/api/v2/entries/en/'
+                             + kelime, timeout=6)
+            veri = r.json()
+        except Exception:
+            raise hata
+        satirlar = []
+        if isinstance(veri, list):
+            for giris in veri:
+                for m in giris.get('meanings') or []:
+                    tur = m.get('partOfSpeech') or ''
+                    for tanim in m.get('definitions') or []:
+                        d = (tanim.get('definition') or '').strip()
+                        if d:
+                            satirlar.append(f'({tur}) {d}' if tur else d)
+        return satirlar
 
     @staticmethod
     def _tarayici_ac(url):
