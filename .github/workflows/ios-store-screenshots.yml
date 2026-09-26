@@ -10,7 +10,7 @@ on:
     inputs:
       sahneler:
         description: "Sahneler (boşlukla): ana offline oyun liste anlam sonuc sozluk"
-        default: "ana oyun liste anlam sonuc offline"
+        default: "ana oyun liste sonuc offline sozluk"
 
 jobs:
   screenshots:

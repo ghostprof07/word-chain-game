@@ -1947,14 +1947,20 @@ class WordChainOnlineApp(App):
         self.bota_karsi_basla('orta')
         self.offline.dur()   # saat donsun: görüntüde süreler sabit kalsın
         oda = self.offline.oda
-        iyi, zayif = Bot(oda, 'zor'), Bot(oda, 'kolay')
+        # Tanıdık kelimelerle sabit zincir (İngilizce sözlük); sözlükte
+        # yoksa bot'un seçtiği kelimeye düşer.
+        zincir = ['planet', 'tiger', 'rainbow', 'window', 'wizard', 'dragon', 'night']
+        oda.gerekli_harf = zincir[0][0]
+        yedek = Bot(oda, 'orta')
         hamle = 7 if sahne == 'sonuc' else 6
         for i in range(hamle):
             insan = i % 2 == 0
-            kelime = (iyi if insan else zayif).kelime_sec()
-            if not kelime:
-                break
-            oda.kelime_oyna('human' if insan else 'bot', kelime)
+            kelime = zincir[i]
+            if not oda.kelime_oyna('human' if insan else 'bot', kelime)[0]:
+                kelime = yedek.kelime_sec()
+                if not kelime:
+                    break
+                oda.kelime_oyna('human' if insan else 'bot', kelime)
         oda.toplam_sure, oda.hamle_sure = 134, 13
         if sahne == 'sonuc':
             oda.toplam_sure = 0
