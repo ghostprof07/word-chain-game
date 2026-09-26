@@ -33,6 +33,18 @@ jobs:
       - name: Kodu çek
         uses: actions/checkout@v4
 
+      # App Store yalnızca Xcode 26 (iOS 26 SDK) ile derlenmiş uygulamaları
+      # kabul ediyor; runner'ın varsayılanı daha eski olabiliyor.
+      - name: Xcode 26+ seç
+        run: |
+          set -e
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$XC" ] || { echo "HATA: runner'da Xcode 26+ yok"; exit 1; }
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
       - name: Python kur
         uses: actions/setup-python@v5
         with:
@@ -159,6 +171,7 @@ jobs:
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -archivePath $RUNNER_TEMP/Lexicoil.xcarchive \
             ARCHS=arm64 \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             TARGETED_DEVICE_FAMILY="$DEVICE_FAMILY" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
