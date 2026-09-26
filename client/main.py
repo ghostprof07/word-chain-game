@@ -1920,6 +1920,53 @@ class WordChainOnlineApp(App):
     def on_stop(self):
         self.net.kapat()
 
+    # ── Vitrin modu (mağaza ekran görüntüleri) ───────────────────────────────
+    # LEXICOIL_VITRIN=<sahne> ile açılır; simülatörde dokunma yapılamadığı için
+    # ekran görüntüsü workflow'u her sahneyi ayrı bir açılışla hazırlatır.
+    # Normal kullanımda değişken yok → hiçbir etkisi yok.
+    def on_start(self):
+        sahne = os.environ.get('LEXICOIL_VITRIN')
+        if sahne:
+            Clock.schedule_once(lambda dt: self._vitrin(sahne), 1.5)
+
+    def _vitrin(self, sahne):
+        import random
+        from bot import Bot
+        random.seed(7)   # her derlemede aynı kelimeler
+        baglan = self.sm.get_screen('baglan')
+        baglan.ad_giris.text = 'Alex'
+        if sahne == 'ana':
+            return
+        if sahne == 'offline':
+            baglan._solo_popup()
+            return
+        if sahne == 'sozluk':
+            self.sozluk_ac()
+            return
+
+        self.bota_karsi_basla('orta')
+        self.offline.dur()   # saat donsun: görüntüde süreler sabit kalsın
+        oda = self.offline.oda
+        iyi, zayif = Bot(oda, 'zor'), Bot(oda, 'kolay')
+        hamle = 7 if sahne == 'sonuc' else 6
+        for i in range(hamle):
+            insan = i % 2 == 0
+            kelime = (iyi if insan else zayif).kelime_sec()
+            if not kelime:
+                break
+            oda.kelime_oyna('human' if insan else 'bot', kelime)
+        oda.toplam_sure, oda.hamle_sure = 134, 13
+        if sahne == 'sonuc':
+            oda.toplam_sure = 0
+            oda.bitti = True
+            self._mesaj_geldi({**oda.durum(), 'tip': 'oyun_bitti'})
+            return
+        self._mesaj_geldi({**oda.durum(), 'tip': 'durum'})
+        if sahne == 'liste':
+            self.kelime_listesi_ac(oda.zincir)
+        elif sahne == 'anlam':
+            self.anlam_ac(oda.zincir[0]['kelime'])
+
 
 if __name__ == '__main__':
     WordChainOnlineApp().run()

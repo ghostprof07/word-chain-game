@@ -1,0 +1,150 @@
+name: iOS Magaza Ekran Goruntuleri
+
+# App Store için iPhone 6.5" (1284×2778) ekran görüntüleri üretir.
+# Uygulama "vitrin modu"nda (LEXICOIL_VITRIN ortam değişkeni, bkz. main.py
+# _vitrin) her sahne için ayrı açılır — simülatörde dokunma olmadığından
+# ekranlar örnek verilerle doğrudan hazırlanır.
+# Derleme adımları test-ios-simulator.yml ile aynı (aynı önbellek).
+on:
+  workflow_dispatch:
+    inputs:
+      sahneler:
+        description: "Sahneler (boşlukla): ana offline oyun liste anlam sonuc sozluk"
+        default: "ana oyun liste anlam sonuc offline"
+
+jobs:
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sistem bağımlılıkları (autotools)
+        run: brew install autoconf automake libtool pkg-config
+
+      - name: kivy-ios kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install kivy-ios "cython<3.1" pillow
+
+      - name: Simülatör derleme önbelleği
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            .cache
+          key: kivy-ios-sim-v2-${{ runner.os }}
+          restore-keys: |
+            kivy-ios-dist-v1-${{ runner.os }}
+
+      - name: Kivy'yi simülatör için derle
+        run: toolchain build kivy --platform iphonesimulator-arm64
+
+      - name: Python paketlerini kur
+        run: |
+          toolchain pip install --no-binary :all: certifi idna urllib3 charset-normalizer requests websocket-client
+
+      - name: Xcode projesi oluştur
+        run: toolchain create Lexicoil client
+
+      - name: Uygulama varlıklarını yerleştir
+        run: |
+          set -e
+          PROJ=lexicoil-ios
+          ICONSET=$(find $PROJ -type d -name 'AppIcon.appiconset' | head -1)
+          if [ -n "$ICONSET" ]; then
+            rm -rf "$ICONSET"/* && cp ios/AppIcon.appiconset/* "$ICONSET"/
+          fi
+          PLIST=$(find $PROJ -name '*Info.plist' -not -path '*/build/*' | head -1)
+          PB=/usr/libexec/PlistBuddy
+          $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          $PB -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+
+      - name: Simülatör için derle
+        run: |
+          xcodebuild -project lexicoil-ios/lexicoil.xcodeproj \
+            -scheme lexicoil -configuration Debug \
+            -sdk iphonesimulator -derivedDataPath dd \
+            ARCHS=arm64 VALID_ARCHS=arm64 EXCLUDED_ARCHS=x86_64 \
+            ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+            TARGETED_DEVICE_FAMILY=1 \
+            build
+
+      - name: Sahneleri çek
+        env:
+          SAHNELER: ${{ inputs.sahneler }}
+        run: |
+          set -e
+          APP=$(find dd -name '*.app' -type d -path '*iphonesimulator*' | head -1)
+          BUNDLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+
+          # 6.5" sınıfının doğal çözünürlüğü 1284×2778 (iPhone 13 Pro Max).
+          # Cihaz tipi yoksa büyük bir modele düşer, sonra yeniden boyutlanır.
+          UDID=""
+          for M in "iPhone 13 Pro Max" "iPhone 14 Plus" "iPhone 16 Pro Max"; do
+            UDID=$(xcrun simctl create Vitrin "$M" 2>/dev/null) && { echo "Model: $M"; break; }
+          done
+          [ -n "$UDID" ] || { xcrun simctl list devicetypes; exit 1; }
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" \
+            --batteryState charged --batteryLevel 100 \
+            --wifiBars 3 --cellularMode active --cellularBars 4 || true
+          xcrun simctl install "$UDID" "$APP"
+
+          mkdir -p ham
+          # İlk açılış (sözlük yükleme vb.) uzun sürer — ısınma turu
+          SIMCTL_CHILD_LEXICOIL_VITRIN=ana xcrun simctl launch "$UDID" "$BUNDLE"
+          sleep 45
+          xcrun simctl terminate "$UDID" "$BUNDLE" || true
+
+          i=0
+          for S in $SAHNELER; do
+            i=$((i+1))
+            SIMCTL_CHILD_LEXICOIL_VITRIN=$S xcrun simctl launch "$UDID" "$BUNDLE"
+            # anlam sahnesi internetten tanım çeker — biraz daha bekle
+            if [ "$S" = anlam ]; then sleep 30; else sleep 20; fi
+            xcrun simctl io "$UDID" screenshot "ham/$(printf %02d $i)-$S.png"
+            xcrun simctl terminate "$UDID" "$BUNDLE" || true
+            sleep 2
+          done
+          ls -l ham
+
+      - name: 1284×2778'e getir
+        run: |
+          python - <<'EOF'
+          import glob, os
+          from PIL import Image
+          W, H = 1284, 2778
+          os.makedirs('magaza', exist_ok=True)
+          for f in sorted(glob.glob('ham/*.png')):
+              im = Image.open(f).convert('RGB')      # App Store alfa kabul etmez
+              if im.size != (W, H):
+                  # genişliğe ölçekle, fazla yüksekliği ortadan kırp
+                  h = round(im.height * W / im.width)
+                  im = im.resize((W, h), Image.LANCZOS)
+                  ust = max(0, (h - H) // 2)
+                  im = im.crop((0, ust, W, ust + H))
+                  if im.height < H:
+                      yeni = Image.new('RGB', (W, H), im.getpixel((0, im.height - 1)))
+                      yeni.paste(im, (0, 0)); im = yeni
+              out = os.path.join('magaza', os.path.basename(f))
+              im.save(out)
+              print(out, im.size)
+          EOF
+
+      - name: Ekran görüntülerini yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-magaza-ekran-goruntuleri
+          path: |
+            magaza/*.png
+            ham/*.png
