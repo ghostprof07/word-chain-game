@@ -785,7 +785,7 @@ class OyunEkrani(Screen):
 
         for i, oge in enumerate(zincir):
             renk = YESIL if oge['no'] == 1 else MAVI
-            metin = oge['kelime'] if i == 0 else f"→  {oge['kelime']}"
+            metin = oge['kelime'] if i == 0 else f"›  {oge['kelime']}"
             lbl = Label(text=metin, font_size=dp(14), bold=True, color=renk,
                         size_hint_x=None)
             lbl.bind(texture_size=lambda inst, val: setattr(inst, 'width', val[0] + dp(8)))
