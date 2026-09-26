@@ -144,26 +144,36 @@ def secim_vurgu(btn, secili, renk_secili=YESIL):
     btn.color = (0, 0, 0, 1) if secili else (0.7, 0.7, 0.7, 1)
 
 
+class GirisKutusu(TextInput):
+    """Klavye açılırken pencere davranışını kutunun konumuna göre seçen
+    TextInput. 'pan' tüm pencereyi klavye yüksekliği kadar kaydırır: alttaki
+    kutular için iyi (oyun girişi, sohbet) ama üst yarıdaki kutuları (ana
+    ekrandaki isim, sözlük araması) ekran dışına iter; onlar zaten klavyenin
+    üstünde kaldığından kaydırma kapatılır ('').
+
+    Mod, FocusBehavior klavyeyi istemeden ÖNCE ayarlanmalı: Kivy/SDL2 modu
+    request_keyboard anında Android'e iletir. focus'a sonradan bind edilen
+    bir callback geç kalıyordu (ilk dokunuşta eski mod uygulanıyordu).
+
+    klavye_cb: odak değişince (True/False) çağrılır — ekran yerleşimini
+    klavyeye göre ayarlamak için (bkz. OyunEkrani._kompakt)."""
+    klavye_cb = None
+
+    def _on_focus(self, instance, value, *largs):
+        if value:
+            _, y = self.to_window(self.center_x, self.center_y)
+            Window.softinput_mode = '' if y > Window.height / 2 else 'pan'
+        if self.klavye_cb:
+            self.klavye_cb(value)
+        super()._on_focus(instance, value, *largs)
+
+
 def giris_kutusu(hint, **kw):
     kw.setdefault('font_size', dp(22))
-    ti = TextInput(multiline=False,
-                   hint_text=hint, hint_text_color=(0.45, 0.4, 0.55, 1),
-                   background_color=GENC, foreground_color=(1, 1, 1, 1),
-                   cursor_color=PEMBE, padding=[dp(14), dp(12)], **kw)
-    ti.bind(focus=_klavye_modu_sec)
-    return ti
-
-
-def _klavye_modu_sec(ti, odakta):
-    """Klavye açılırken pencere davranışını kutunun konumuna göre seçer.
-    'pan' tüm pencereyi klavye yüksekliği kadar kaydırır: alttaki kutular için
-    iyi (oyun girişi, sohbet) ama üst yarıdaki kutuları (ana ekrandaki isim,
-    sözlük araması) ekran dışına iter. Üst yarıdaki kutu zaten klavyenin
-    üstünde kaldığından onlar için kaydırma kapatılır ('')."""
-    if not odakta:
-        return
-    _, y = ti.to_window(ti.center_x, ti.center_y)
-    Window.softinput_mode = '' if y > Window.height / 2 else 'pan'
+    return GirisKutusu(multiline=False,
+                       hint_text=hint, hint_text_color=(0.45, 0.4, 0.55, 1),
+                       background_color=GENC, foreground_color=(1, 1, 1, 1),
+                       cursor_color=PEMBE, padding=[dp(14), dp(12)], **kw)
 
 
 # ── Gradyan (canlı tema) ───────────────────────────────────────────────────────
@@ -578,6 +588,13 @@ class OyunEkrani(Screen):
         kok = BoxLayout(orientation='vertical', padding=dp(18), spacing=dp(10))
         kart(kok, renk=KOYU)
 
+        # Klavye açıkken ('pan') Android pencereyi klavye yüksekliği kadar
+        # yukarı iter → ekranın ÜSTÜ gizlenir. Kelime yazılırken esnek boşluk
+        # alttan buraya taşınır (_kompakt), içerik alta toplanır ve harf/süre/
+        # skorlar görünür kalır; yalnızca toplam süre çubuğu ve zincir gizlenir.
+        self._ust_bosluk = Label(size_hint_y=0)
+        kok.add_widget(self._ust_bosluk)
+
         # Üst butonlar durum çubuğunun (saat/pil) altında kalmasın — bazı
         # cihazlarda pencere çentik alanına taşıyor, basılamıyordu.
         kok.add_widget(Label(size_hint_y=None, height=dp(26)))
@@ -657,7 +674,8 @@ class OyunEkrani(Screen):
         self.son_lbl.height = dp(22)
         kok.add_widget(self.son_lbl)
 
-        kok.add_widget(Label())
+        self._alt_bosluk = Label()
+        kok.add_widget(self._alt_bosluk)
 
         self.durum_lbl = etiket('', boyut=15, kalin=True, renk=SARI)
         self.durum_lbl.size_hint_y = None
@@ -667,6 +685,7 @@ class OyunEkrani(Screen):
         self.giris = giris_kutusu(t('type_word'), size_hint_y=None, height=dp(56),
                                   font_size=dp(26))
         self.giris.bind(on_text_validate=lambda *_: self._gonder())
+        self.giris.klavye_cb = self._kompakt
         kok.add_widget(self.giris)
 
         self.gonder_btn = buton(t('send'), callback=lambda *_: self._gonder())
@@ -676,6 +695,11 @@ class OyunEkrani(Screen):
 
         kok.add_widget(Label(size_hint_y=None, height=dp(6)))
         self.add_widget(kok)
+
+    def _kompakt(self, klavye_acik):
+        """Klavye açıkken esnek boşluğu üste al (içerik alta toplanır)."""
+        self._ust_bosluk.size_hint_y = 1 if klavye_acik else 0
+        self._alt_bosluk.size_hint_y = 0 if klavye_acik else 1
 
     def benim_no_ayarla(self, no):
         self._benim_no = no
