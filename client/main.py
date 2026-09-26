@@ -592,7 +592,7 @@ class OyunEkrani(Screen):
         # yukarı iter → ekranın ÜSTÜ gizlenir. Kelime yazılırken esnek boşluk
         # alttan buraya taşınır (_kompakt), içerik alta toplanır ve harf/süre/
         # skorlar görünür kalır; yalnızca toplam süre çubuğu ve zincir gizlenir.
-        self._ust_bosluk = Label(size_hint_y=0)
+        self._ust_bosluk = Label(size_hint_y=None, height=0)
         kok.add_widget(self._ust_bosluk)
 
         # Üst butonlar durum çubuğunun (saat/pil) altında kalmasın — bazı
@@ -698,8 +698,14 @@ class OyunEkrani(Screen):
 
     def _kompakt(self, klavye_acik):
         """Klavye açıkken esnek boşluğu üste al (içerik alta toplanır)."""
-        self._ust_bosluk.size_hint_y = 1 if klavye_acik else 0
-        self._alt_bosluk.size_hint_y = 0 if klavye_acik else 1
+        # DİKKAT: Kivy'de size_hint_y=0 "0 oranında esne" DEĞİL, "sabit
+        # yükseklik" demek (yükseklik olduğu yerde kalır) — katlamak için
+        # size_hint_y=None + height=0 şart.
+        acik, kapali = ((self._ust_bosluk, self._alt_bosluk) if klavye_acik
+                        else (self._alt_bosluk, self._ust_bosluk))
+        acik.size_hint_y = 1
+        kapali.size_hint_y = None
+        kapali.height = 0
 
     def benim_no_ayarla(self, no):
         self._benim_no = no
