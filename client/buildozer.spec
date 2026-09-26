@@ -63,6 +63,15 @@ android.enable_androidx = True
 # İnternet trafiği (geliştirme sırasında http; yayında wss/https kullan)
 android.allow_backup = True
 
+# ── python-for-android SÜRÜMÜ ─────────────────────────────────────────────────
+# p4a 2026.05.09 (master) PyPI'daki Android wheel'lerini seçip kuramıyor
+# ("charset_normalizer-3.5.1-cp314-...-android_24_arm64_v8a.whl is not a
+# supported wheel") ve requirements'taki sürüm sabitlemesini yok sayıyor.
+# Düzeltme develop'ta (kivy/python-for-android#3366, 2026-08-24); resmi sürüm
+# çıkınca master'a dönülebilir. Tekrarlanabilirlik için commit sabit.
+p4a.branch = develop
+p4a.commit = e772ad93f20a61c0bbe1cf8955e073cfb41062e1
+
 [buildozer]
 
 # Günlük ayrıntı seviyesi (2 = en ayrıntılı)
