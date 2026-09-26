@@ -1,0 +1,220 @@
+name: iOS App Store'a Yukle (imzali)
+
+# İmzalı IPA üretip App Store Connect'e (TestFlight) yükler. Mac gerekmez:
+# derleme + imza + yükleme GitHub'ın macOS runner'ında yapılır.
+#
+# Gerekli repo secret'ları:
+#   IOS_DIST_P12_BASE64    Apple Distribution sertifikası + özel anahtar (.p12, base64)
+#   IOS_DIST_P12_PASSWORD  .p12 parolası
+#   IOS_PROFILE_BASE64     App Store provisioning profile (.mobileprovision, base64)
+#   ASC_KEY_ID             App Store Connect API anahtar kimliği
+#   ASC_ISSUER_ID          App Store Connect API issuer kimliği
+#   ASC_KEY_P8_BASE64      App Store Connect API anahtarı (AuthKey_XXX.p8, base64)
+on:
+  workflow_dispatch:
+    inputs:
+      yukle:
+        description: "App Store Connect'e yüklensin mi? (hayır = sadece imzalı IPA artifact)"
+        type: boolean
+        default: true
+
+env:
+  BUNDLE_ID: com.kemalyavuz.lexicoil
+  # 1 = yalnızca iPhone (iPad'de uyumluluk modunda yine çalışır).
+  # 1,2 = iPhone+iPad: o zaman 13" iPad ekran görüntüleri de gerekir ve
+  # iPad düzeni App Review'da ayrıca incelenir.
+  DEVICE_FAMILY: "1"
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sistem bağımlılıkları (autotools)
+        run: brew install autoconf automake libtool pkg-config
+
+      - name: kivy-ios kur
+        run: |
+          python -m pip install --upgrade pip
+          pip install kivy-ios "cython<3.1"
+
+      # build-ios.yml ile aynı önbellek → biri derlediyse diğeri hızlı geçer.
+      - name: Derleme önbelleği
+        uses: actions/cache@v4
+        with:
+          path: |
+            dist
+            .cache
+          key: kivy-ios-dist-v1-${{ runner.os }}
+
+      - name: Kivy + Python'u iOS için derle
+        run: toolchain build kivy
+
+      - name: Python paketlerini kur
+        run: |
+          toolchain pip install --no-binary :all: certifi idna urllib3 charset-normalizer requests websocket-client
+
+      - name: Xcode projesi oluştur
+        run: toolchain create Lexicoil client
+
+      # build-ios.yml'deki adımın aynısı (ikon, Info.plist, gizlilik manifestosu).
+      # Değiştirirsen ikisini birlikte güncelle.
+      - name: Uygulama varlıklarını ve Info.plist'i yerleştir
+        run: |
+          set -e
+          PROJ=lexicoil-ios
+
+          ICONSET=$(find $PROJ -type d -name 'AppIcon.appiconset' | head -1)
+          if [ -z "$ICONSET" ]; then
+            echo "HATA: AppIcon.appiconset bulunamadi — App Store ikonsuz kabul etmez."
+            exit 1
+          fi
+          rm -rf "$ICONSET"/*
+          cp ios/AppIcon.appiconset/* "$ICONSET"/
+
+          PLIST=$(find $PROJ -name '*Info.plist' -not -path '*/build/*' | head -1)
+          echo "Info.plist: $PLIST"
+          [ -f "$PLIST" ] || { echo "HATA: Info.plist bulunamadi"; exit 1; }
+          PB=/usr/libexec/PlistBuddy
+          ayarla() {
+            $PB -c "Set :$1 $3" "$PLIST" 2>/dev/null || \
+            $PB -c "Add :$1 $2 $3" "$PLIST"
+          }
+          SURUM=$(grep -E '^version\s*=' client/buildozer.spec | head -1 | sed 's/.*=\s*//')
+          echo "Sürüm: $SURUM"
+          ayarla CFBundleShortVersionString string "$SURUM"
+          # Build numarası aynı sürüm içinde benzersiz ve artan olmalı.
+          # Tekrar denemede (re-run) çakışmasın diye attempt eklenir.
+          ayarla CFBundleVersion string "${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          ayarla CFBundleIdentifier string "$BUNDLE_ID"
+          ayarla CFBundleIconName string AppIcon
+          ayarla ITSAppUsesNonExemptEncryption bool false
+          # iPad'de (uyumluluk modunda da) Split View'a girmesin; portre
+          # kilitli uygulamalar için App Store doğrulaması bunu ister.
+          ayarla UIRequiresFullScreen bool true
+
+          $PB -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
+          $PB -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          $PB -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          $PB -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>/dev/null || true
+          $PB -c "Print" "$PLIST" | head -40
+
+          cp ios/PrivacyInfo.xcprivacy "$PROJ"/
+          python -m pbxproj file "$PROJ/lexicoil.xcodeproj" \
+            "PrivacyInfo.xcprivacy" --target lexicoil
+          echo "PrivacyInfo projeye eklendi."
+
+      # Geçici keychain: sertifika yalnızca bu çalışma boyunca var olur.
+      - name: İmza sertifikası ve profili kur
+        env:
+          P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          set -e
+          [ -n "$P12_BASE64" ] && [ -n "$PROFILE_BASE64" ] || {
+            echo "HATA: IOS_DIST_P12_BASE64 / IOS_PROFILE_BASE64 secret'ları eksik."; exit 1; }
+
+          KC=$RUNNER_TEMP/imza.keychain-db
+          KC_PASS=$(openssl rand -hex 16)
+          echo "$P12_BASE64" | base64 --decode > $RUNNER_TEMP/dist.p12
+          security create-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          security import $RUNNER_TEMP/dist.p12 -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KC"
+
+          echo "$PROFILE_BASE64" | base64 --decode > $RUNNER_TEMP/profil.mobileprovision
+          security cms -D -i $RUNNER_TEMP/profil.mobileprovision > $RUNNER_TEMP/profil.plist
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" $RUNNER_TEMP/profil.plist)
+          NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" $RUNNER_TEMP/profil.plist)
+          TEAM=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" $RUNNER_TEMP/profil.plist)
+          APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" $RUNNER_TEMP/profil.plist)
+          echo "Profil: $NAME ($UUID), takım $TEAM, app id $APPID"
+          [ "$APPID" = "$TEAM.$BUNDLE_ID" ] || {
+            echo "HATA: profil $BUNDLE_ID için değil ($APPID)"; exit 1; }
+
+          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                   "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$d"
+            cp $RUNNER_TEMP/profil.mobileprovision "$d/$UUID.mobileprovision"
+          done
+          echo "PROFILE_NAME=$NAME" >> $GITHUB_ENV
+          echo "TEAM_ID=$TEAM" >> $GITHUB_ENV
+
+      - name: İmzalı arşiv (xcarchive)
+        run: |
+          xcodebuild -project lexicoil-ios/lexicoil.xcodeproj \
+            -scheme lexicoil -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath $RUNNER_TEMP/Lexicoil.xcarchive \
+            ARCHS=arm64 \
+            TARGETED_DEVICE_FAMILY="$DEVICE_FAMILY" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            archive
+
+      - name: IPA dışa aktar
+        run: |
+          set -e
+          cat > $RUNNER_TEMP/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+            <key>uploadSymbols</key><false/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/Lexicoil.xcarchive \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
+          IPA=$(ls $RUNNER_TEMP/export/*.ipa | head -1)
+          mkdir -p cikti && cp "$IPA" cikti/Lexicoil-appstore.ipa
+          ls -lh cikti
+
+      - name: İmzalı IPA'yı artifact olarak sakla
+        uses: actions/upload-artifact@v4
+        with:
+          name: lexicoil-appstore-ipa
+          path: cikti/Lexicoil-appstore.ipa
+
+      - name: App Store Connect'e yükle
+        if: ${{ inputs.yukle }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          set -e
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
+          xcrun altool --validate-app -f cikti/Lexicoil-appstore.ipa -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          xcrun altool --upload-app -f cikti/Lexicoil-appstore.ipa -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Keychain'i temizle
+        if: always()
+        run: security delete-keychain $RUNNER_TEMP/imza.keychain-db 2>/dev/null || true
